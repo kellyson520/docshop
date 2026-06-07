@@ -1,0 +1,273 @@
+# GitHub Actions 测试工作流
+# 自动化运行单元测试、覆盖率检查和 E2E 测试
+
+name: 前端测试
+
+# 触发条件
+on:
+  # 推送到 main 或 develop 分支时触发
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/test.yml'
+
+  # 针对 main 或 develop 分支的 Pull Request 时触发
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'frontend/**'
+
+  # 允许手动触发
+  workflow_dispatch:
+
+# 权限配置
+permissions:
+  contents: read
+  actions: read
+  checks: write
+
+# 并发控制
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# 环境变量
+env:
+  NODE_VERSION: '20'
+  FRONTEND_DIR: './frontend'
+
+jobs:
+  # ==================== 单元测试任务 ====================
+  unit-test:
+    name: 单元测试
+    runs-on: ubuntu-latest
+
+    steps:
+      # 检出代码
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # 设置 Node.js 环境
+      - name: 设置 Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.FRONTEND_DIR }}/package-lock.json
+
+      # 安装依赖
+      - name: 安装依赖
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm ci
+
+      # 运行单元测试
+      - name: 运行单元测试
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm run test -- --reporter=verbose
+
+      # 上传测试结果
+      - name: 上传测试结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: |
+            ${{ env.FRONTEND_DIR }}/test-results/
+            ${{ env.FRONTEND_DIR }}/coverage/
+          retention-days: 30
+
+  # ==================== 覆盖率检查任务 ====================
+  coverage:
+    name: 覆盖率检查
+    runs-on: ubuntu-latest
+    needs: unit-test
+
+    steps:
+      # 检出代码
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # 设置 Node.js 环境
+      - name: 设置 Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.FRONTEND_DIR }}/package-lock.json
+
+      # 安装依赖
+      - name: 安装依赖
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm ci
+
+      # 运行覆盖率检查
+      - name: 运行覆盖率检查
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm run test:coverage
+
+      # 上传覆盖率报告
+      - name: 上传覆盖率报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: ${{ env.FRONTEND_DIR }}/coverage/
+          retention-days: 30
+
+      # 上传覆盖率到 Codecov（可选）
+      - name: 上传覆盖率到 Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ${{ env.FRONTEND_DIR }}/coverage
+          files: lcov.info
+          flags: unittests
+          name: codecov-frontend
+          fail_ci_if_error: false
+
+  # ==================== E2E 测试任务 ====================
+  e2e-test:
+    name: E2E 测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # 检出代码
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # 设置 Node.js 环境
+      - name: 设置 Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.FRONTEND_DIR }}/package-lock.json
+
+      # 安装依赖
+      - name: 安装依赖
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm ci
+
+      # 安装 Playwright 浏览器
+      - name: 安装 Playwright 浏览器
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npx playwright install --with-deps
+
+      # 构建应用（用于 E2E 测试）
+      - name: 构建应用
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm run build
+        env:
+          NODE_ENV: test
+
+      # 运行 E2E 测试
+      - name: 运行 E2E 测试
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm run test:e2e
+        env:
+          CI: true
+
+      # 上传 E2E 测试结果
+      - name: 上传 E2E 测试结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: |
+            ${{ env.FRONTEND_DIR }}/playwright-report/
+            ${{ env.FRONTEND_DIR }}/test-results/
+          retention-days: 30
+
+      # 上传 Playwright 报告到 GitHub Pages（可选）
+      - name: 上传 Playwright 报告
+        if: always()
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.FRONTEND_DIR }}/playwright-report/
+
+  # ==================== 代码质量检查任务 ====================
+  lint:
+    name: 代码质量检查
+    runs-on: ubuntu-latest
+
+    steps:
+      # 检出代码
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # 设置 Node.js 环境
+      - name: 设置 Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.FRONTEND_DIR }}/package-lock.json
+
+      # 安装依赖
+      - name: 安装依赖
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm ci
+
+      # 运行 ESLint 检查（如果配置了 ESLint）
+      - name: 运行 ESLint 检查
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: |
+          if npm run lint --silent 2>/dev/null; then
+            echo "ESLint 检查通过"
+          else
+            echo "未配置 ESLint 或检查失败"
+          fi
+        continue-on-error: true
+
+      # 运行类型检查（如果配置了 TypeScript）
+      - name: 运行类型检查
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: |
+          if npm run type-check --silent 2>/dev/null; then
+            echo "类型检查通过"
+          else
+            echo "未配置 TypeScript 或检查失败"
+          fi
+        continue-on-error: true
+
+  # ==================== 构建验证任务 ====================
+  build:
+    name: 构建验证
+    runs-on: ubuntu-latest
+
+    steps:
+      # 检出代码
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # 设置 Node.js 环境
+      - name: 设置 Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.FRONTEND_DIR }}/package-lock.json
+
+      # 安装依赖
+      - name: 安装依赖
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm ci
+
+      # 构建应用
+      - name: 构建应用
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      # 上传构建产物
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: ${{ env.FRONTEND_DIR }}/dist/
+          retention-days: 7

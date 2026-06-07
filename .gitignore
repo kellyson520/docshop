@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/test-results/
+frontend/playwright-report/
+
+# Local runtime data
+.env
+*.pid
+*.log
+*.err.log
+backend/.dev-backend.pid
+frontend/.dev-frontend.pid
+backend/logs/
+backend/data/
+data/
+artifacts/
+
+# Databases and generated samples
+*.db
+*.sqlite
+*.sqlite3
+*.docx
+*.pdf
+*.xlsx
+
+# Tool caches
+.codegraph/
+.reasonix/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
