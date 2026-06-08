@@ -1,0 +1,219 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "18"
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Lint
+  # ─────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Ruff check backend
+        run: ruff check backend/
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: ESLint frontend
+        working-directory: frontend
+        run: npx eslint src/ --max-warnings 0
+
+  # ─────────────────────────────────────────────
+  # Backend tests
+  # ─────────────────────────────────────────────
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install pytest pytest-cov httpx
+
+      - name: Run backend tests
+        working-directory: backend
+        run: python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml
+
+      - name: Run root-level tests
+        run: python -m pytest test/ -v --tb=short
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+
+  # ─────────────────────────────────────────────
+  # Frontend tests
+  # ─────────────────────────────────────────────
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: frontend
+        run: npx vitest run --coverage
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+
+  # ─────────────────────────────────────────────
+  # Frontend E2E tests
+  # ─────────────────────────────────────────────
+  frontend-e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Start backend server
+        working-directory: backend
+        env:
+          SECRET_KEY: ci-test-secret-key
+          DATABASE_URL: sqlite:///./test_ci.db
+          UPLOAD_DIR: ./test_uploads
+          ENVIRONMENT: testing
+        run: |
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+          echo "Waiting for backend..."
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/api/v1/health; then
+              echo "Backend ready"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Run E2E tests
+        working-directory: frontend
+        env:
+          VITE_API_URL: http://127.0.0.1:8000
+        run: npx playwright test
+
+      - name: Upload E2E report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+
+  # ─────────────────────────────────────────────
+  # Docker build
+  # ─────────────────────────────────────────────
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t docshop:ci .
+
+      - name: Verify container starts and health check passes
+        run: |
+          docker run -d --name docshop-test \
+            -e SECRET_KEY=ci-test-secret-key \
+            -e DATABASE_URL=sqlite:////app/data/test.db \
+            -e ENVIRONMENT=testing \
+            -p 8080:80 \
+            docshop:ci
+
+          echo "Waiting for container health..."
+          for i in $(seq 1 30); do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' docshop-test 2>/dev/null || echo "starting")
+            echo "  Attempt $i: $STATUS"
+            if [ "$STATUS" = "healthy" ]; then
+              echo "Container is healthy!"
+              docker logs docshop-test
+              docker rm -f docshop-test
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Container failed health check"
+          docker logs docshop-test
+          docker rm -f docshop-test
+          exit 1
