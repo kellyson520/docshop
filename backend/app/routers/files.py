@@ -104,7 +104,7 @@ async def upload_file(
     # Magic Bytes 深度验证
     tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False, dir=settings.TEMP_DIR) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
 
@@ -219,7 +219,7 @@ async def upload_version(
     # Magic Bytes 深度验证：先将文件写入临时文件，再进行校验
     tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False, dir=settings.TEMP_DIR) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
 
@@ -970,7 +970,7 @@ def reconstruct_version(
         # DOCX 重建：克隆基版本，应用段落变更
         from docx import Document as DocxDoc
         import shutil, tempfile
-        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".docx")
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".docx", dir=settings.TEMP_DIR)
         os.close(tmp_fd)
         shutil.copy2(base.storage_path, tmp_path)
 
