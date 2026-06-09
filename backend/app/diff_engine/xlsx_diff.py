@@ -10,6 +10,7 @@ Excel 差异引擎
 """
 
 import difflib
+import math
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
@@ -60,6 +61,10 @@ class CellDiff:
         if pd.isna(val):
             return None
         if isinstance(val, float):
+            if math.isinf(val):
+                return str(val)
+            if math.isnan(val):
+                return None
             if val == int(val):
                 return int(val)
             return round(val, 6)
