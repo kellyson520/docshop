@@ -372,18 +372,17 @@ def _detect_ole_content_type(file_path: Path) -> str:
         try:
             import olefile
             ole = olefile.OleFileIO(file_path)
-            streams = ole.listdir()
-            
-            for stream in streams:
-                stream_name = '/'.join(stream)
-                if 'WordDocument' in stream_name:
-                    ole.close()
-                    return 'doc'
-                if 'Workbook' in stream_name or 'Book' in stream_name:
-                    ole.close()
-                    return 'xls'
-            
-            ole.close()
+            try:
+                streams = ole.listdir()
+                
+                for stream in streams:
+                    stream_name = '/'.join(stream)
+                    if 'WordDocument' in stream_name:
+                        return 'doc'
+                    if 'Workbook' in stream_name or 'Book' in stream_name:
+                        return 'xls'
+            finally:
+                ole.close()
         except ImportError:
             logger.debug("olefile 库不可用")
         
