@@ -165,6 +165,7 @@ class AccessLog(Base):
         user_id: str = None,
         session_id: str = None,
         device_info: dict = None,
+        referer_info: dict | None = None,
         location_info: dict = None,
     ) -> "AccessLog":
         """
@@ -195,9 +196,9 @@ class AccessLog(Base):
         request_query = str(request.url.query) if hasattr(request, "url") else None
         request_method = request.method if hasattr(request, "method") else None
         referer = request.headers.get("referer") if hasattr(request, "headers") else None
-        referer_host = device_info.get("referer_host") if device_info else None
-        referer_domain = device_info.get("referer_domain") if device_info else None
-        referer_type = device_info.get("referer_type") if device_info else None
+        referer_host = referer_info.get("referer_host") if referer_info else None
+        referer_domain = referer_info.get("referer_domain") if referer_info else None
+        referer_type = referer_info.get("referer_type") if referer_info else None
 
         log = cls(
             timestamp=timestamp,

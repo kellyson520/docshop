@@ -28,6 +28,15 @@ def test_access_log_additive_statements_only_add_missing_columns():
     assert "ALTER TABLE access_logs ADD COLUMN referer_host VARCHAR(255)" in statements
     assert "ALTER TABLE access_logs ADD COLUMN referer_domain VARCHAR(255)" in statements
     assert "ALTER TABLE access_logs ADD COLUMN referer_type VARCHAR(32)" in statements
+    assert "ALTER TABLE access_logs ADD COLUMN referer VARCHAR(255)" not in statements
+
+
+def test_access_log_additive_statements_skip_existing_referer_columns():
+    statements = _access_log_additive_statements(
+        {"id", "timestamp", "referer", "referer_host", "referer_domain", "referer_type"}
+    )
+
+    assert statements == []
 
 
 def test_access_log_from_request_persists_normalized_referer_fields():
@@ -43,7 +52,7 @@ def test_access_log_from_request_persists_normalized_referer_fields():
 
     log = AccessLog.from_request(
         request,
-        device_info={
+        referer_info={
             "referer_host": "www.limestart.cn",
             "referer_domain": "limestart.cn",
             "referer_type": "external",

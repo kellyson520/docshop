@@ -220,6 +220,7 @@ def _ensure_schema_updates() -> None:
             if inspector.has_table("access_logs"):
                 columns = {column["name"] for column in inspector.get_columns("access_logs")}
                 for statement in _access_log_additive_statements(columns):
+                    db_logger.info(f"Applying access_logs additive schema statement: {statement}")
                     conn.execute(text(statement))
     except sqlalchemy_exc.NoInspectionAvailable:
         db_logger.warning("Skipped schema update because the database engine cannot be inspected")
