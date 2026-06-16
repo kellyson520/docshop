@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+﻿import { describe, expect, it } from 'vitest'
 import {
   formatDeviceFallback,
   formatDevicePrimary,
@@ -69,6 +69,7 @@ describe('trackingDisplay', () => {
     }
 
     expect(formatDevicePrimary(row)).toBe('未知手机')
+    expect(formatDeviceFallback(row)).toBe('未知手机')
     expect(formatDeviceSecondary(row)).toBe('Android · Chrome')
   })
 
@@ -88,6 +89,20 @@ describe('trackingDisplay', () => {
     expect(formatDeviceTooltip(row)).toBe('Apple Mac\nmacOS · Safari 17')
   })
 
+  it('uses linux desktop fallback when desktop details are absent', () => {
+    const row = {
+      device_type: 'desktop',
+      os_name: 'Linux',
+      browser_name: 'Firefox',
+      browser_version: '126',
+    }
+
+    expect(formatDevicePrimary(row)).toBe('桌面设备')
+    expect(formatDeviceFallback(row)).toBe('Linux PC')
+    expect(formatDeviceSecondary(row)).toBe('Linux · Firefox 126')
+    expect(formatDeviceTooltip(row)).toBe('桌面设备\nLinux · Firefox 126')
+  })
+
   it('deduplicates brand and model combinations cleanly', () => {
     const row = {
       device_type: 'mobile',
@@ -97,7 +112,7 @@ describe('trackingDisplay', () => {
     }
 
     expect(formatDevicePrimary(row)).toBe('Samsung Galaxy S24')
-    expect(formatDeviceFallback(row)).toBe('Samsung Galaxy S24')
+    expect(formatDeviceFallback(row)).toBe('未知手机')
     expect(formatDeviceSecondary(row)).toBe('Chrome')
     expect(formatDeviceTooltip(row)).toBe('Samsung Galaxy S24\nChrome')
   })
@@ -116,6 +131,12 @@ describe('trackingDisplay', () => {
     expect(formatDevicePrimary(desktopRow)).toBe('桌面设备')
     expect(formatDeviceFallback(desktopRow)).toBe('桌面设备')
     expect(formatDeviceTooltip(desktopRow)).toBe('桌面设备')
+  })
+
+  it('returns unknown fallback for unknown or missing device types', () => {
+    expect(formatDeviceFallback({ device_type: 'unknown' })).toBe('未识别')
+    expect(formatDeviceFallback({ device_type: 'console', os_name: 'Linux' })).toBe('未识别')
+    expect(formatDeviceFallback({})).toBe('未识别')
   })
 
   it('gracefully degrades device secondary output when pieces are missing', () => {

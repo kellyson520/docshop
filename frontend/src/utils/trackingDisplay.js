@@ -1,4 +1,4 @@
-const UNKNOWN_LABEL = '未识别'
+﻿const UNKNOWN_LABEL = '未识别'
 
 const DEVICE_TYPE_LABELS = {
   desktop: '桌面端',
@@ -45,8 +45,13 @@ function getUnknownDeviceLabel(type) {
   return '桌面设备'
 }
 
+function normalizeDeviceType(type) {
+  const normalized = normalizeText(type).toLowerCase()
+  return ['desktop', 'mobile', 'tablet'].includes(normalized) ? normalized : ''
+}
+
 function isWindowsDesktop(row) {
-  return row?.device_type === 'desktop' && normalizeText(row?.os_name) === 'Windows'
+  return normalizeDeviceType(row?.device_type) === 'desktop' && normalizeText(row?.os_name) === 'Windows'
 }
 
 function isAppleMac(row) {
@@ -54,9 +59,18 @@ function isAppleMac(row) {
   const model = normalizeText(row?.device_model).toLowerCase()
   const osName = normalizeText(row?.os_name).toLowerCase()
   return (
-    row?.device_type === 'desktop' &&
+    normalizeDeviceType(row?.device_type) === 'desktop' &&
     (brand === 'apple' || model === 'mac' || model === 'macbook' || osName === 'mac os' || osName === 'macos')
   )
+}
+
+function getDesktopFallback(osName) {
+  const normalizedOsName = normalizeText(osName).toLowerCase()
+
+  if (normalizedOsName === 'windows') return 'Windows PC'
+  if (normalizedOsName === 'macos' || normalizedOsName === 'mac os') return 'Apple Mac'
+  if (normalizedOsName === 'linux') return 'Linux PC'
+  return '桌面设备'
 }
 
 export function formatDevicePrimary(row = {}) {
@@ -75,7 +89,7 @@ export function formatDevicePrimary(row = {}) {
 
   if (brand || model) return brand || model
 
-  return getUnknownDeviceLabel(row.device_type)
+  return getUnknownDeviceLabel(normalizeDeviceType(row.device_type))
 }
 
 export function formatDeviceSecondary(row = {}) {
@@ -88,7 +102,14 @@ export function formatDeviceSecondary(row = {}) {
 }
 
 export function formatDeviceFallback(row = {}) {
-  return formatDevicePrimary(row)
+  const deviceType = normalizeDeviceType(row.device_type)
+
+  if (!deviceType) return UNKNOWN_LABEL
+  if (deviceType === 'mobile') return '未知手机'
+  if (deviceType === 'tablet') return '未知平板'
+  if (deviceType === 'desktop') return getDesktopFallback(row.os_name)
+
+  return UNKNOWN_LABEL
 }
 
 export function formatDeviceTooltip(row = {}) {
