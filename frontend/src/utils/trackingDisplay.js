@@ -89,7 +89,10 @@ export function formatDevicePrimary(row = {}) {
 
   if (brand || model) return brand || model
 
-  return getUnknownDeviceLabel(normalizeDeviceType(row.device_type))
+  const deviceType = normalizeDeviceType(row.device_type)
+  if (!deviceType) return UNKNOWN_LABEL
+
+  return getUnknownDeviceLabel(deviceType)
 }
 
 export function formatDeviceSecondary(row = {}) {

@@ -133,10 +133,13 @@ describe('trackingDisplay', () => {
     expect(formatDeviceTooltip(desktopRow)).toBe('桌面设备')
   })
 
-  it('returns unknown fallback for unknown or missing device types', () => {
+  it('returns unknown labels for unknown or missing device types in primary and tooltip paths', () => {
+    expect(formatDevicePrimary({})).toBe('未识别')
+    expect(formatDevicePrimary({ device_type: 'unknown' })).toBe('未识别')
     expect(formatDeviceFallback({ device_type: 'unknown' })).toBe('未识别')
     expect(formatDeviceFallback({ device_type: 'console', os_name: 'Linux' })).toBe('未识别')
     expect(formatDeviceFallback({})).toBe('未识别')
+    expect(formatDeviceTooltip({})).toBe('未识别')
   })
 
   it('gracefully degrades device secondary output when pieces are missing', () => {
