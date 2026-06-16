@@ -195,6 +195,9 @@ class AccessLog(Base):
         request_query = str(request.url.query) if hasattr(request, "url") else None
         request_method = request.method if hasattr(request, "method") else None
         referer = request.headers.get("referer") if hasattr(request, "headers") else None
+        referer_host = device_info.get("referer_host") if device_info else None
+        referer_domain = device_info.get("referer_domain") if device_info else None
+        referer_type = device_info.get("referer_type") if device_info else None
 
         log = cls(
             timestamp=timestamp,
@@ -218,9 +221,9 @@ class AccessLog(Base):
             request_path=request_path,
             request_query=request_query,
             referer=referer,
-            referer_host=None,
-            referer_domain=None,
-            referer_type=None,
+            referer_host=referer_host,
+            referer_domain=referer_domain,
+            referer_type=referer_type,
             response_status=response_status,
             response_time_ms=response_time_ms,
             session_id=session_id,
