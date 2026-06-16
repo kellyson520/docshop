@@ -27,6 +27,19 @@ from app.utils.logger import get_logger
 
 logger = get_logger("tracking")
 
+_COMMON_MULTI_PART_PUBLIC_SUFFIXES = {
+    "co.uk",
+    "org.uk",
+    "gov.uk",
+    "ac.uk",
+    "com.au",
+    "net.au",
+    "org.au",
+    "co.jp",
+    "com.cn",
+    "com.hk",
+}
+
 _SENSITIVE_HEADER_NAMES = {
     "authorization",
     "cookie",
@@ -326,19 +339,15 @@ class TrackingMiddleware(BaseHTTPMiddleware):
             }
 
         referer_host = parsed.hostname.lower()
-        referer_domain = referer_host
-        if referer_host.startswith("www."):
-            referer_domain = referer_host[4:]
-        else:
-            parts = referer_host.split(".")
-            if len(parts) > 2:
-                referer_domain = ".".join(parts[-2:])
+        referer_domain = self._get_registrable_domain(referer_host)
 
         normalized_request_host = (request_host or "").lower()
+        request_domain = self._get_registrable_domain(normalized_request_host) if normalized_request_host else None
         if normalized_request_host and (
             referer_host == normalized_request_host
             or referer_domain == normalized_request_host
             or referer_host.endswith(f".{normalized_request_host}")
+            or (request_domain is not None and referer_domain == request_domain)
         ):
             referer_type = "internal"
         else:
@@ -349,6 +358,38 @@ class TrackingMiddleware(BaseHTTPMiddleware):
             "referer_domain": referer_domain,
             "referer_type": referer_type,
         }
+
+    def _get_registrable_domain(self, host: str) -> Optional[str]:
+        if not host:
+            return None
+
+        normalized_host = host.lower().strip(".")
+        if not normalized_host:
+            return None
+
+        if normalized_host.startswith("www."):
+            normalized_host = normalized_host[4:]
+
+        parts = normalized_host.split(".")
+        if len(parts) <= 2:
+            return normalized_host
+
+        suffix = ".".join(parts[-2:])
+        if suffix in _COMMON_MULTI_PART_PUBLIC_SUFFIXES and len(parts) >= 3:
+            return ".".join(parts[-3:])
+
+        return ".".join(parts[-2:])
+
+    def _merge_device_signals(
+        self,
+        client_hints: Dict[str, Any],
+        ua_info: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        merged = dict(ua_info or {})
+        for key, value in (client_hints or {}).items():
+            if value is not None:
+                merged[key] = value
+        return merged
 
     async def _log_access(
         self,
@@ -380,10 +421,7 @@ class TrackingMiddleware(BaseHTTPMiddleware):
             user_agent_str = request.headers.get("user-agent", "")
             client_hints = self._parse_client_hints(dict(request.headers))
             ua_info = self._parse_user_agent(user_agent_str) if user_agent_str else {}
-            device_info = {
-                **ua_info,
-                **{key: value for key, value in client_hints.items() if value is not None},
-            }
+            device_info = self._merge_device_signals(client_hints, ua_info)
             referer_info = self._parse_referer(
                 request.headers.get("referer"),
                 request_host=request.url.hostname or "",

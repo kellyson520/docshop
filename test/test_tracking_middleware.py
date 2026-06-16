@@ -133,6 +133,30 @@ def test_parse_referer_classifies_direct_internal_and_unknown():
     assert unknown["referer_type"] == "unknown"
 
 
+def test_parse_referer_treats_sibling_subdomains_as_internal():
+    middleware = TrackingMiddleware(app=None)
+
+    referer = middleware._parse_referer(
+        "https://www.docshop.local/path",
+        request_host="app.docshop.local",
+    )
+
+    assert referer["referer_type"] == "internal"
+    assert referer["referer_domain"] == "docshop.local"
+
+
+def test_parse_referer_handles_multi_part_public_suffix_as_internal():
+    middleware = TrackingMiddleware(app=None)
+
+    referer = middleware._parse_referer(
+        "https://www.docshop.co.uk/path",
+        request_host="app.docshop.co.uk",
+    )
+
+    assert referer["referer_type"] == "internal"
+    assert referer["referer_domain"] == "docshop.co.uk"
+
+
 def test_parse_user_agent_normalizes_android_brand_and_model_on_real_path(monkeypatch):
     install_fake_user_agents(monkeypatch)
     middleware = TrackingMiddleware(app=None)
@@ -143,6 +167,36 @@ def test_parse_user_agent_normalizes_android_brand_and_model_on_real_path(monkey
     assert parsed["device_brand"] == "Xiaomi"
     assert parsed["device_model"] == "Xiaomi 14"
     assert parsed["os_name"] == "Android"
+
+
+def test_merge_device_signals_prefers_client_hints_for_browser_platform_and_device_type():
+    middleware = TrackingMiddleware(app=None)
+
+    merged = middleware._merge_device_signals(
+        {
+            "browser_name": "Edge",
+            "browser_version": "149",
+            "os_name": "Windows",
+            "device_type": "desktop",
+        },
+        {
+            "browser_name": "Chrome",
+            "browser_version": "124",
+            "os_name": "Android",
+            "os_version": "14",
+            "device_type": "mobile",
+            "device_brand": "Xiaomi",
+            "device_model": "Xiaomi 14",
+            "screen_resolution": None,
+        },
+    )
+
+    assert merged["browser_name"] == "Edge"
+    assert merged["browser_version"] == "149"
+    assert merged["os_name"] == "Windows"
+    assert merged["device_type"] == "desktop"
+    assert merged["device_brand"] == "Xiaomi"
+    assert merged["device_model"] == "Xiaomi 14"
 
 
 def test_simple_user_agent_parse_cleans_android_model_noise():
