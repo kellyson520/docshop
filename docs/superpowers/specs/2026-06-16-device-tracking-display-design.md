@@ -102,10 +102,33 @@ Desktop browsers usually do not expose true hardware models in the UA, so the fa
 
 `backend/app/middlewares/tracking.py` continues to use a two-stage strategy:
 
-1. **Primary parser:** `user_agents.parse(...)`
-2. **Fallback parser:** enhanced `_simple_user_agent_parse(...)`
+1. **Client Hints parser:** `sec-ch-ua`, `sec-ch-ua-mobile`, `sec-ch-ua-platform`
+2. **Primary parser:** `user_agents.parse(...)`
+3. **Fallback parser:** enhanced `_simple_user_agent_parse(...)`
+
+Client Hints should be preferred for browser family, browser version, platform, and mobile-vs-desktop classification when present, because they are often cleaner than legacy UA strings. `user_agents` and the fallback parser should continue to provide device brand/model enrichment.
 
 If the primary parser yields useful `device.brand` and `device.model`, preserve them after light normalization. If the primary parser is missing, unavailable, or too vague, the fallback parser supplies a better stable value.
+
+### Client Hints Rules
+
+When available, parse these headers before relying on legacy UA heuristics:
+
+- `sec-ch-ua`
+- `sec-ch-ua-mobile`
+- `sec-ch-ua-platform`
+
+Normalization rules:
+
+- ignore fake brands such as `Not)A;Brand`
+- if `Microsoft Edge` is present, normalize browser to `Edge`
+- otherwise recognize stable browser families such as Chromium, Chrome, Safari, and Firefox where applicable
+- extract a compact major version from the client hints brand/version tuple
+- `sec-ch-ua-mobile=?1` should bias classification toward `mobile`
+- `sec-ch-ua-mobile=?0` should bias classification toward non-mobile
+- `sec-ch-ua-platform` should normalize to `Windows`, `Android`, `iOS`, `macOS`, or `Linux`
+
+Client Hints should not replace model extraction logic for Android hardware. They mainly provide cleaner browser and platform identification.
 
 ### Apple Rules
 
@@ -159,6 +182,51 @@ Introduce a dedicated normalization helper in the tracking parsing path so backe
 - convert empty results into `None`
 
 This helper should be used for both the `user_agents` result and the fallback parser result.
+
+### Referer Parsing Rules
+
+The backend should strengthen referer handling instead of storing it only as an opaque raw string.
+
+Suggested normalized referer fields:
+
+- raw referer URL
+- referer host, for example `www.limestart.cn`
+- referer registrable domain, for example `limestart.cn`
+- referer type:
+  - `direct`
+  - `internal`
+  - `external`
+  - `unknown`
+
+Normalization rules:
+
+- no referer header -> `direct`
+- same-site referer -> `internal`
+- different-site referer -> `external`
+- invalid or unparsable referer -> `unknown`
+
+The raw referer value can remain persisted for audit/debugging, but UI and analytics logic should prefer the normalized host/domain when available.
+
+### Example Expected Parsing
+
+For a request such as:
+
+- `referer: https://www.limestart.cn/`
+- `sec-ch-ua: "Microsoft Edge";v="149", "Chromium";v="149", "Not)A;Brand";v="24"`
+- `sec-ch-ua-mobile: ?0`
+- `sec-ch-ua-platform: "Windows"`
+- `user-agent: ... Edg/149.0.0.0`
+
+The normalized result should converge toward:
+
+- referer host: `www.limestart.cn`
+- referer domain: `limestart.cn`
+- referer type: `external`
+- browser name: `Edge`
+- browser version: `149`
+- platform / OS: `Windows`
+- device type: `desktop`
+- user-facing device summary: `Windows PC`
 
 ## Frontend Design
 
@@ -287,20 +355,23 @@ This preserves the desktop optimization without creating cramped side cards on s
 ## Data Flow
 
 1. Request enters tracking middleware.
-2. Middleware parses User-Agent with primary parser, then fallback if needed.
-3. Backend normalization produces stable `device_brand` and `device_model`.
-4. Access log persists normalized fields.
-5. Admin logs API returns normalized fields unchanged.
-6. Frontend helpers build the final compact display for the existing `设备` column.
-7. Frontend places browser, device type, and operating system data into the new primary-secondary analytics layout.
+2. Middleware parses Client Hints when available.
+3. Middleware parses User-Agent with primary parser, then fallback if needed.
+4. Backend normalization produces stable device, browser, platform, and referer-derived fields.
+5. Access log persists normalized fields.
+6. Admin logs API returns normalized fields unchanged.
+7. Frontend helpers build the final compact display for the existing `设备` column.
+8. Frontend places browser, device type, and operating system data into the new primary-secondary analytics layout.
 
 ## Error Handling and Edge Cases
 
 - If UA parsing fails completely, keep `device_type` if possible and use fallback labels.
+- If Client Hints are partially present, use the available pieces without requiring all headers.
 - If `user_agents` is unavailable, the fallback parser must still produce readable results.
 - If Android extraction yields obvious garbage, discard it rather than exposing it.
 - If OS or browser is missing, secondary summary should degrade gracefully, for example showing only one side instead of `unknown · unknown`.
 - If both `device_brand` and `device_model` are absent, frontend should show the normalized fallback rather than blank content.
+- If referer parsing fails, keep the raw referer if available but classify the normalized type as `unknown`.
 
 ## Testing Strategy
 
@@ -308,6 +379,10 @@ This preserves the desktop optimization without creating cramped side cards on s
 
 Add coverage for the enhanced fallback parser and normalization behavior:
 
+- Client Hints parse `Microsoft Edge` correctly from `sec-ch-ua`
+- `sec-ch-ua-platform` normalizes Windows correctly
+- `sec-ch-ua-mobile=?0` supports desktop classification
+- referer `https://www.limestart.cn/` normalizes host/domain and classifies as `external`
 - iPhone UA returns `Apple / iPhone`
 - iPad UA returns `Apple / iPad`
 - common Android phone UA returns a cleaned model
@@ -332,6 +407,8 @@ Add coverage for device display helpers and the tracking dashboard table:
 
 Verify with real admin tracking rows covering:
 
+- Edge on Windows with Client Hints present
+- external referer such as `www.limestart.cn`
 - iPhone / iPad visits
 - Android phone visits
 - Android tablet visits
