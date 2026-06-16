@@ -1,8 +1,15 @@
 import asyncio
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 
 import app.middlewares.tracking as tracking_module
 from app.middlewares.tracking import TrackingMiddleware
+
+
+SAMPLE_ANDROID_UA = (
+    "Mozilla/5.0 (Linux; Android 14; Xiaomi 14 Build/UKQ1.230917.001; wv) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.0.0 Mobile Safari/537.36"
+)
 
 
 class DummyDB:
@@ -39,6 +46,24 @@ class CaptureAccessLog:
         self.kwargs = kwargs
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+
+class FakeParsedUA:
+    is_mobile = True
+    is_tablet = False
+    is_pc = False
+    device = SimpleNamespace(brand="xiaomi", model="xiaomi 14")
+    os = SimpleNamespace(family="Android", version_string="14")
+    browser = SimpleNamespace(family="Chrome Mobile WebView", version_string="124.0.0.0")
+
+
+class FakeUserAgentsModule(ModuleType):
+    def parse(self, user_agent):
+        return FakeParsedUA()
+
+
+def install_fake_user_agents(monkeypatch):
+    monkeypatch.setitem(sys.modules, "user_agents", FakeUserAgentsModule("user_agents"))
 
 
 def test_parse_client_hints_prefers_edge_on_windows():
@@ -108,14 +133,11 @@ def test_parse_referer_classifies_direct_internal_and_unknown():
     assert unknown["referer_type"] == "unknown"
 
 
-def test_simple_user_agent_parse_cleans_android_model_noise():
+def test_parse_user_agent_normalizes_android_brand_and_model_on_real_path(monkeypatch):
+    install_fake_user_agents(monkeypatch)
     middleware = TrackingMiddleware(app=None)
-    ua = (
-        "Mozilla/5.0 (Linux; Android 14; Xiaomi 14 Build/UKQ1.230917.001; wv) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.0.0 Mobile Safari/537.36"
-    )
 
-    parsed = middleware._simple_user_agent_parse(ua)
+    parsed = middleware._parse_user_agent(SAMPLE_ANDROID_UA)
 
     assert parsed["device_type"] == "mobile"
     assert parsed["device_brand"] == "Xiaomi"
@@ -123,7 +145,19 @@ def test_simple_user_agent_parse_cleans_android_model_noise():
     assert parsed["os_name"] == "Android"
 
 
-def test_log_access_merges_client_hints_with_user_agent_before_building_access_log(monkeypatch):
+def test_simple_user_agent_parse_cleans_android_model_noise():
+    middleware = TrackingMiddleware(app=None)
+
+    parsed = middleware._simple_user_agent_parse(SAMPLE_ANDROID_UA)
+
+    assert parsed["device_type"] == "mobile"
+    assert parsed["device_brand"] == "Xiaomi"
+    assert parsed["device_model"] == "Xiaomi 14"
+    assert parsed["os_name"] == "Android"
+
+
+def test_log_access_merges_client_hints_with_real_user_agent_path_before_building_access_log(monkeypatch):
+    install_fake_user_agents(monkeypatch)
     middleware = TrackingMiddleware(app=None)
     db = DummyDB()
     captured = {}
@@ -137,16 +171,6 @@ def test_log_access_merges_client_hints_with_user_agent_before_building_access_l
         "os_name": "Windows",
         "device_type": "desktop",
     })
-    monkeypatch.setattr(middleware, "_parse_user_agent", lambda ua: {
-        "browser_name": "Chrome",
-        "browser_version": "124",
-        "os_name": "Android",
-        "os_version": "14",
-        "device_type": "mobile",
-        "device_brand": "Xiaomi",
-        "device_model": "Xiaomi 14",
-        "screen_resolution": None,
-    })
     monkeypatch.setattr(middleware, "_extract_business_context", lambda request: {})
 
     def capture_update_session(db_session, request, user_id, device_info):
@@ -156,7 +180,7 @@ def test_log_access_merges_client_hints_with_user_agent_before_building_access_l
 
     request = SimpleNamespace(
         headers={
-            "user-agent": "ua-string",
+            "user-agent": SAMPLE_ANDROID_UA,
             "referer": "https://www.limestart.cn/",
         },
         url=SimpleNamespace(path="/docs", query="", hostname="docshop.local"),

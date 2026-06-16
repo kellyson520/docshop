@@ -619,6 +619,35 @@ class TrackingMiddleware(BaseHTTPMiddleware):
             # 忽略GeoIP查询错误
             return {}
 
+    def _normalize_device_details(
+        self,
+        user_agent_str: str,
+        device_brand: Optional[str],
+        device_model: Optional[str],
+    ) -> Dict[str, Optional[str]]:
+        normalized_brand = device_brand
+        normalized_model = device_model
+
+        if device_brand:
+            normalized_brand = device_brand.strip().title()
+        if device_model:
+            normalized_model = device_model.strip()
+
+        if "android" in user_agent_str.lower():
+            fallback_info = self._simple_user_agent_parse(user_agent_str)
+            fallback_brand = fallback_info.get("device_brand")
+            fallback_model = fallback_info.get("device_model")
+
+            if fallback_brand:
+                normalized_brand = fallback_brand
+            if fallback_model:
+                normalized_model = fallback_model
+
+        return {
+            "device_brand": normalized_brand,
+            "device_model": normalized_model,
+        }
+
     def _parse_user_agent(self, user_agent_str: str) -> Dict[str, Any]:
         """
         解析User-Agent字符串
@@ -641,10 +670,16 @@ class TrackingMiddleware(BaseHTTPMiddleware):
             elif ua.is_pc:
                 device_type = "desktop"
 
+            normalized_device = self._normalize_device_details(
+                user_agent_str,
+                ua.device.brand,
+                ua.device.model,
+            )
+
             return {
                 "device_type": device_type,
-                "device_brand": ua.device.brand,
-                "device_model": ua.device.model,
+                "device_brand": normalized_device.get("device_brand"),
+                "device_model": normalized_device.get("device_model"),
                 "os_name": ua.os.family,
                 "os_version": ua.os.version_string,
                 "browser_name": ua.browser.family,
