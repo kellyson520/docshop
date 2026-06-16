@@ -187,6 +187,23 @@ These helpers should centralize display logic instead of embedding complex branc
 
 The design should avoid adding any extra columns, because the admin tracking table is already dense. The upgraded device cell must work within the current table structure, including on smaller screens or narrower browser windows.
 
+### Statistics Section Layout Rework
+
+The `访问统计` area should not keep the current three-way equal split for device type, browser, and operating system. Real data density is uneven, and equal-width tables create mismatched container heights and large blank areas under shorter cards.
+
+Replace that with a primary-secondary layout:
+
+- left primary card: browser distribution
+- right upper compact card: device type
+- right lower compact card: operating system
+
+Recommended desktop grid:
+
+- outer columns: `1.6fr 1fr`
+- right side rows: `1fr 1fr`
+
+This gives the longest dataset to the widest area and prevents short datasets from visually wasting space. The `7天趋势` block should remain on its own full-width row below, so it is no longer stretched apart by the tallest distribution card above it.
+
 ## Layout and Typography Rules
 
 The current device section feels visually uneven. The new layout should make every row more consistent.
@@ -225,6 +242,48 @@ The goal is not to make every row pixel-identical, but rows should remain visual
 
 This addresses the current complaint that the table looks messy and elements appear at inconsistent sizes.
 
+## Distribution Card Rules
+
+The upper analytics block should feel compact and balanced rather than like three unrelated tables.
+
+### Browser Distribution Card
+
+- use it as the primary card
+- allow greater height than the side cards
+- show top rows by default
+- if the list is long, prefer internal scrolling or controlled expansion instead of making the whole section excessively tall
+
+### Device Type Card
+
+Device type usually has only a few rows, so it should not sit inside a large empty table shell. Prefer a compact summary style:
+
+- dense list rows, or
+- small metric rows with label and count
+
+The visual goal is to make the card feel intentionally compact, not unfinished.
+
+### Operating System Card
+
+Operating system can remain a compact table or list, but should use:
+
+- tighter row height
+- fixed card height aligned with the right-side stack
+- internal scrolling when the list is longer than the visible area
+
+### Trend Separation
+
+The `7天趋势` block should start immediately below the distribution section with fixed spacing. It must not inherit large vertical whitespace caused by uneven card heights above.
+
+### Responsive Behavior
+
+On smaller widths:
+
+- collapse the distribution section into a single-column stack
+- order it as browser, device type, operating system
+- keep title height, card spacing, and inner padding consistent
+
+This preserves the desktop optimization without creating cramped side cards on small screens.
+
 ## Data Flow
 
 1. Request enters tracking middleware.
@@ -233,6 +292,7 @@ This addresses the current complaint that the table looks messy and elements app
 4. Access log persists normalized fields.
 5. Admin logs API returns normalized fields unchanged.
 6. Frontend helpers build the final compact display for the existing `设备` column.
+7. Frontend places browser, device type, and operating system data into the new primary-secondary analytics layout.
 
 ## Error Handling and Edge Cases
 
@@ -264,6 +324,9 @@ Add coverage for device display helpers and the tracking dashboard table:
 - missing brand/model falls back correctly
 - overflow content still exposes tooltip text
 - system/browser summary degrades gracefully when one side is missing
+- browser distribution renders as the primary analytics card
+- device type and operating system render as compact side cards without large empty filler
+- trend block remains visually independent below the distribution area
 
 ### Manual Verification
 
@@ -275,6 +338,8 @@ Verify with real admin tracking rows covering:
 - Windows desktop visits
 - macOS desktop visits
 - Linux desktop visits
+- uneven browser/device/os list lengths
+- no large blank vertical area under short analytics cards
 
 The desired outcome is that the table is easier to scan and that most rows now show a recognizable device summary instead of only a generic device type.
 
