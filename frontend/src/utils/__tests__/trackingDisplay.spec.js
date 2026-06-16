@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatDeviceFallback,
   formatDevicePrimary,
   formatDeviceSecondary,
   formatDeviceTooltip,
@@ -54,8 +55,9 @@ describe('trackingDisplay', () => {
     }
 
     expect(formatDevicePrimary(row)).toBe('Windows PC')
+    expect(formatDeviceFallback(row)).toBe('Windows PC')
     expect(formatDeviceSecondary(row)).toBe('Windows · Edge 149')
-    expect(formatDeviceTooltip(row)).toContain('Windows PC')
+    expect(formatDeviceTooltip(row)).toBe('Windows PC\nWindows · Edge 149')
     expect(getDeviceTypeText('desktop')).toBeTruthy()
   })
 
@@ -68,5 +70,58 @@ describe('trackingDisplay', () => {
 
     expect(formatDevicePrimary(row)).toBe('未知手机')
     expect(formatDeviceSecondary(row)).toBe('Android · Chrome')
+  })
+
+  it('formats apple mac devices with normalized desktop summary', () => {
+    const row = {
+      device_type: 'desktop',
+      device_brand: 'Apple',
+      device_model: 'MacBook Pro',
+      os_name: 'macOS',
+      browser_name: 'Safari',
+      browser_version: '17',
+    }
+
+    expect(formatDevicePrimary(row)).toBe('Apple Mac')
+    expect(formatDeviceFallback(row)).toBe('Apple Mac')
+    expect(formatDeviceSecondary(row)).toBe('macOS · Safari 17')
+    expect(formatDeviceTooltip(row)).toBe('Apple Mac\nmacOS · Safari 17')
+  })
+
+  it('deduplicates brand and model combinations cleanly', () => {
+    const row = {
+      device_type: 'mobile',
+      device_brand: 'Samsung',
+      device_model: 'Samsung Galaxy S24',
+      browser_name: 'Chrome',
+    }
+
+    expect(formatDevicePrimary(row)).toBe('Samsung Galaxy S24')
+    expect(formatDeviceFallback(row)).toBe('Samsung Galaxy S24')
+    expect(formatDeviceSecondary(row)).toBe('Chrome')
+    expect(formatDeviceTooltip(row)).toBe('Samsung Galaxy S24\nChrome')
+  })
+
+  it('uses tablet and desktop normalized fallback labels when brand and model are absent', () => {
+    const tabletRow = {
+      device_type: 'tablet',
+      browser_name: 'Safari',
+    }
+    const desktopRow = {
+      device_type: 'desktop',
+    }
+
+    expect(formatDevicePrimary(tabletRow)).toBe('未知平板')
+    expect(formatDeviceFallback(tabletRow)).toBe('未知平板')
+    expect(formatDevicePrimary(desktopRow)).toBe('桌面设备')
+    expect(formatDeviceFallback(desktopRow)).toBe('桌面设备')
+    expect(formatDeviceTooltip(desktopRow)).toBe('桌面设备')
+  })
+
+  it('gracefully degrades device secondary output when pieces are missing', () => {
+    expect(formatDeviceSecondary({ browser_name: 'Firefox', browser_version: '126' })).toBe('Firefox 126')
+    expect(formatDeviceSecondary({ os_name: 'iOS' })).toBe('iOS')
+    expect(formatDeviceSecondary({ browser_version: '126' })).toBe('126')
+    expect(formatDeviceSecondary({})).toBe('')
   })
 })
