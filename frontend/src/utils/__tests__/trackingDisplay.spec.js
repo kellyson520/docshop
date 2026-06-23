@@ -1,9 +1,13 @@
 ﻿import { describe, expect, it } from 'vitest'
 import {
+  buildTrackingInfoCard,
+  buildTrackingTechnicalDetails,
   formatDeviceFallback,
   formatDevicePrimary,
   formatDeviceSecondary,
   formatDeviceTooltip,
+  formatGeoLocation,
+  formatClientEnvironment,
   formatTrackingBusiness,
   getDeviceTypeText,
   getDistributionLabel,
@@ -42,6 +46,15 @@ describe('trackingDisplay', () => {
     }
 
     expect(formatTrackingBusiness(row)).toBe('创建分享令牌 / 分享令牌 / 新令牌')
+  })
+
+  it('prefers resolved mobile model display name when available', () => {
+    expect(formatDevicePrimary({
+      device_display_name: 'Huawei P40 / ANA-AL00',
+      device_type: 'mobile',
+      device_brand: 'Huawei',
+      device_model: 'ANA-AL00',
+    })).toBe('Huawei P40 / ANA-AL00')
   })
 
   it('formats desktop fallback with normalized windows summary', () => {
@@ -147,5 +160,114 @@ describe('trackingDisplay', () => {
     expect(formatDeviceSecondary({ os_name: 'iOS' })).toBe('iOS')
     expect(formatDeviceSecondary({ browser_version: '126' })).toBe('126')
     expect(formatDeviceSecondary({})).toBe('')
+  })
+
+  it('formats precise browser location with rounded coordinates and accuracy', () => {
+    expect(formatGeoLocation({
+      geo_latitude: 39.904212,
+      geo_longitude: 116.407389,
+      geo_accuracy: 8.5,
+    })).toBe('📍 39.9042, 116.4074 (±9m)')
+  })
+
+  it('falls back to IP region when precise browser location is absent', () => {
+    expect(formatGeoLocation({ ip_city: 'Beijing', ip_country: 'CN' })).toBe('Beijing, CN')
+    expect(formatGeoLocation({})).toBe('未识别')
+  })
+
+  it('does not treat empty coordinates as 0,0 when browser geolocation is missing', () => {
+    expect(formatGeoLocation({
+      geo_latitude: null,
+      geo_longitude: null,
+      ip_city: 'Linyi',
+      ip_country: 'CN',
+    })).toBe('Linyi, CN')
+
+    expect(formatGeoLocation({
+      geo_latitude: undefined,
+      geo_longitude: undefined,
+    })).toBe('未识别')
+  })
+
+  it('falls back to IP region when coordinates are whitespace strings', () => {
+    expect(formatGeoLocation({
+      geo_latitude: '   ',
+      geo_longitude: '   ',
+      ip_city: 'Beijing',
+      ip_country: 'CN',
+    })).toBe('Beijing, CN')
+  })
+
+  it('formats client timezone and language without leaking empty placeholders', () => {
+    expect(formatClientEnvironment({
+      client_timezone: 'Asia/Shanghai',
+      client_language: 'zh-CN',
+    })).toBe('Asia/Shanghai · zh-CN')
+    expect(formatClientEnvironment({})).toBe('未识别')
+  })
+
+  it('builds a standard info card summary for resolved mobile devices', () => {
+    const row = {
+      device_display_name: 'Huawei P40 / ANA-AL00',
+      device_type: 'mobile',
+      device_brand: 'Huawei',
+      device_model: 'ANA-AL00',
+      os_name: 'Android',
+      browser_name: 'Chrome Mobile WebView',
+      browser_version: '126',
+      geo_latitude: 39.904212,
+      geo_longitude: 116.407389,
+      geo_accuracy: 8.5,
+      client_timezone: 'Asia/Shanghai',
+      client_language: 'zh-CN',
+    }
+
+    expect(buildTrackingInfoCard(row)).toEqual({
+      title: 'Huawei P40 / ANA-AL00',
+      deviceTypeText: '移动端',
+      secondary: 'Android · Chrome Mobile WebView 126',
+      location: '📍 39.9042, 116.4074 (±9m)',
+      environment: 'Asia/Shanghai · zh-CN',
+    })
+  })
+
+  it('falls back to dashes for empty info card summaries', () => {
+    expect(buildTrackingInfoCard({})).toEqual({
+      title: '-',
+      deviceTypeText: '-',
+      secondary: '-',
+      location: '-',
+      environment: '-',
+    })
+  })
+
+  it('returns labeled technical details array with raw values and dash fallbacks', () => {
+    expect(buildTrackingTechnicalDetails({
+      device_model_code: '',
+      device_model_name: 'P40',
+      device_brand_name: 'Huawei',
+      device_display_name: 'Huawei P40 / ANA-AL00',
+      screen_resolution: undefined,
+      geo_latitude: 39.904212,
+      geo_longitude: null,
+      geo_accuracy: 8.5,
+      client_timezone: 'Asia/Shanghai',
+      client_language: undefined,
+      user_agent: 'Mozilla/5.0',
+      visitor_id: '',
+    })).toEqual([
+      { label: '型号代码', value: '-' },
+      { label: '型号名称', value: 'P40' },
+      { label: '品牌名称', value: 'Huawei' },
+      { label: '展示名称', value: 'Huawei P40 / ANA-AL00' },
+      { label: '屏幕分辨率', value: '-' },
+      { label: '纬度', value: '39.904212' },
+      { label: '经度', value: '-' },
+      { label: '定位精度', value: '8.5' },
+      { label: '时区', value: 'Asia/Shanghai' },
+      { label: '语言', value: '-' },
+      { label: 'User-Agent', value: 'Mozilla/5.0' },
+      { label: '访客 ID', value: '-' },
+    ])
   })
 })

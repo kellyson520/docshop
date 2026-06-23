@@ -35,8 +35,30 @@ function normalizeText(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+export function withDash(value) {
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'string' && value.trim() === '') return '-'
+  return value
+}
+
+function toDetailValue(value) {
+  const normalized = withDash(value)
+  return normalized === '-' ? normalized : String(normalized)
+}
+
 function joinParts(parts, separator = ' ') {
   return parts.filter(Boolean).join(separator)
+}
+
+function toFiniteNumber(value) {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed === '') return null
+    value = trimmed
+  }
+  const num = Number(value)
+  return Number.isFinite(num) ? num : null
 }
 
 function getUnknownDeviceLabel(type) {
@@ -74,6 +96,9 @@ function getDesktopFallback(osName) {
 }
 
 export function formatDevicePrimary(row = {}) {
+  const resolvedDisplayName = normalizeText(row.device_display_name)
+  if (resolvedDisplayName) return resolvedDisplayName
+
   const brand = normalizeText(row.device_brand)
   const model = normalizeText(row.device_model)
 
@@ -121,6 +146,24 @@ export function formatDeviceTooltip(row = {}) {
   return secondary ? `${primary}\n${secondary}` : primary
 }
 
+export function formatGeoLocation(row = {}) {
+  const latitude = toFiniteNumber(row.geo_latitude)
+  const longitude = toFiniteNumber(row.geo_longitude)
+
+  if (latitude !== null && longitude !== null) {
+    const accuracy = toFiniteNumber(row.geo_accuracy)
+    const accuracyText = Number.isFinite(accuracy) ? ` (±${Math.round(accuracy)}m)` : ''
+    return `📍 ${latitude.toFixed(4)}, ${longitude.toFixed(4)}${accuracyText}`
+  }
+
+  const region = joinParts([normalizeText(row.ip_city), normalizeText(row.ip_country)], ', ')
+  return region || UNKNOWN_LABEL
+}
+
+export function formatClientEnvironment(row = {}) {
+  return joinParts([normalizeText(row.client_timezone), normalizeText(row.client_language)], ' · ') || UNKNOWN_LABEL
+}
+
 export function getDistributionLabel(value) {
   if (!value || value === 'unknown') return UNKNOWN_LABEL
   return value
@@ -154,4 +197,38 @@ export function formatTrackingBusiness(row = {}) {
   const tokenPreview = row.business_context?.share_token_preview
   if (tokenPreview) parts.push(`token ${tokenPreview}`)
   return parts.join(' / ') || '普通访问'
+}
+
+export function buildTrackingInfoCard(row = {}) {
+  const toInfoCardFallback = (value) => (value === UNKNOWN_LABEL ? '-' : withDash(value))
+  const title = toInfoCardFallback(formatDevicePrimary(row))
+  const deviceTypeText = toInfoCardFallback(getDeviceTypeText(normalizeDeviceType(row.device_type) || row.device_type))
+  const secondary = toInfoCardFallback(formatDeviceSecondary(row))
+  const location = toInfoCardFallback(formatGeoLocation(row))
+  const environment = toInfoCardFallback(formatClientEnvironment(row))
+
+  return {
+    title,
+    deviceTypeText,
+    secondary,
+    location,
+    environment,
+  }
+}
+
+export function buildTrackingTechnicalDetails(row = {}) {
+  return [
+    { label: '型号代码', value: toDetailValue(row.device_model_code) },
+    { label: '型号名称', value: toDetailValue(row.device_model_name) },
+    { label: '品牌名称', value: toDetailValue(row.device_brand_name) },
+    { label: '展示名称', value: toDetailValue(row.device_display_name) },
+    { label: '屏幕分辨率', value: toDetailValue(row.screen_resolution) },
+    { label: '纬度', value: toDetailValue(row.geo_latitude) },
+    { label: '经度', value: toDetailValue(row.geo_longitude) },
+    { label: '定位精度', value: toDetailValue(row.geo_accuracy) },
+    { label: '时区', value: toDetailValue(row.client_timezone) },
+    { label: '语言', value: toDetailValue(row.client_language) },
+    { label: 'User-Agent', value: toDetailValue(row.user_agent) },
+    { label: '访客 ID', value: toDetailValue(row.visitor_id) },
+  ]
 }
