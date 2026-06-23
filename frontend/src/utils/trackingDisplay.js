@@ -122,11 +122,13 @@ export function formatDevicePrimary(row = {}) {
 
 export function formatDeviceSecondary(row = {}) {
   const osName = normalizeText(row.os_name)
+  const osVersion = normalizeText(row.os_version)
   const browserName = normalizeText(row.browser_name)
   const browserVersion = normalizeText(row.browser_version)
 
+  const os = joinParts([osName, osVersion], ' ')
   const browser = joinParts([browserName, browserVersion], ' ')
-  return joinParts([osName, browser], ' · ')
+  return joinParts([os, browser], ' · ')
 }
 
 export function formatDeviceFallback(row = {}) {

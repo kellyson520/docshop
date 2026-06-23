@@ -213,6 +213,7 @@ describe('trackingDisplay', () => {
       device_brand: 'Huawei',
       device_model: 'ANA-AL00',
       os_name: 'Android',
+      os_version: '14',
       browser_name: 'Chrome Mobile WebView',
       browser_version: '126',
       geo_latitude: 39.904212,
@@ -225,10 +226,19 @@ describe('trackingDisplay', () => {
     expect(buildTrackingInfoCard(row)).toEqual({
       title: 'Huawei P40 / ANA-AL00',
       deviceTypeText: '移动端',
-      secondary: 'Android · Chrome Mobile WebView 126',
+      secondary: 'Android 14 · Chrome Mobile WebView 126',
       location: '📍 39.9042, 116.4074 (±9m)',
       environment: 'Asia/Shanghai · zh-CN',
     })
+  })
+
+  it('includes os version in info card secondary summary without extra spaces', () => {
+    expect(buildTrackingInfoCard({
+      os_name: 'Android',
+      os_version: '14',
+      browser_name: 'Chrome',
+      browser_version: '124',
+    }).secondary).toBe('Android 14 · Chrome 124')
   })
 
   it('falls back to dashes for empty info card summaries', () => {

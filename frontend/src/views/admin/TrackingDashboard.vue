@@ -715,7 +715,9 @@ function getTrackingInfoCard(row = {}) {
 }
 
 function formatAccessInfoSystem(row = {}) {
-  return getDistributionLabel(row.os_name)
+  const osName = typeof row.os_name === 'string' ? row.os_name.trim() : ''
+  const osVersion = typeof row.os_version === 'string' ? row.os_version.trim() : ''
+  return [osName, osVersion].filter(Boolean).join(' ') || getDistributionLabel(row.os_name || row.os_version)
 }
 
 function formatAccessInfoBrowser(row = {}) {

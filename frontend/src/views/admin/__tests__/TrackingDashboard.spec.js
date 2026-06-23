@@ -78,6 +78,7 @@ vi.mock('@/api/client', () => ({
           device_brand: 'Microsoft',
           device_model: 'PC',
           os_name: 'Windows',
+          os_version: '11',
           browser_name: 'Edge',
           browser_version: '149',
           request_path: '/demo',
@@ -279,7 +280,7 @@ describe('TrackingDashboard', () => {
     expect(card.attributes('role')).toBe('button')
     expect(card.text()).toContain('桌面端')
     expect(card.text()).toContain('Windows PC')
-    expect(card.text()).toContain('Windows · Edge 149')
+    expect(card.text()).toContain('Windows 11 · Edge 149')
     expect(card.text()).toContain('📍 39.9042, 116.4074 (±9m)')
     expect(card.text()).toContain('Asia/Shanghai · zh-CN')
     expect(wrapper.text()).toContain('visitor-…')
@@ -300,7 +301,7 @@ describe('TrackingDashboard', () => {
     expect(dialog.text()).toContain(expectedLogTime)
     expect(dialog.text()).toContain('设备')
     expect(dialog.text()).toContain('系统')
-    expect(dialog.text()).toContain('Windows')
+    expect(dialog.text()).toContain('Windows 11')
     expect(dialog.text()).toContain('浏览器')
     expect(dialog.text()).toContain('Edge 149')
     expect(dialog.text()).toContain('位置')
@@ -366,4 +367,50 @@ describe('TrackingDashboard', () => {
     const browserItem = summaryItems.find((item) => item.find('.el-descriptions-item__label').text() === '浏览器')
     expect(browserItem?.find('.el-descriptions-item__content').text()).toBe('Firefox 126')
   })
+
+  it('shows os name and version together in dialog system summary without extra spaces', async () => {
+    apiMock.getCalls.length = 0
+    const wrapper = mount(TrackingDashboard, {
+      global: {
+        stubs: {
+          PageHeader: { template: '<div><slot name="actions" /></div>' },
+        },
+        components: {
+          ElRow: passthrough('ElRow'),
+          ElCol: passthrough('ElCol'),
+          ElCard,
+          ElButton: passthrough('ElButton', 'button'),
+          ElRadioGroup: passthrough('ElRadioGroup'),
+          ElRadioButton: passthrough('ElRadioButton', 'button'),
+          ElSelect: passthrough('ElSelect'),
+          ElOption: passthrough('ElOption', 'option'),
+          ElTag: passthrough('ElTag', 'span'),
+          ElSwitch: passthrough('ElSwitch', 'input'),
+          ElSlider: passthrough('ElSlider', 'input'),
+          ElInput: passthrough('ElInput', 'input'),
+          ElDatePicker: passthrough('ElDatePicker', 'input'),
+          ElPagination: passthrough('ElPagination'),
+          ElInputNumber: passthrough('ElInputNumber', 'input'),
+          ElTable,
+          ElTableColumn,
+          ElDialog,
+          ElDescriptions,
+          ElDescriptionsItem,
+          ElDivider,
+        },
+        directives: { loading: {} },
+      },
+    })
+
+    await flushPromises()
+    await flushPromises()
+
+    await wrapper.find('.tracking-info-card').trigger('click')
+    await flushPromises()
+
+    const summaryItems = wrapper.findAll('.access-info-summary .el-descriptions-item')
+    const systemItem = summaryItems.find((item) => item.find('.el-descriptions-item__label').text() === '系统')
+    expect(systemItem?.find('.el-descriptions-item__content').text()).toBe('Windows 11')
+  })
+
 })
