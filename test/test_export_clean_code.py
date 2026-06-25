@@ -1,10 +1,16 @@
 from pathlib import Path
+import subprocess
+import sys
 
 from scripts.export_clean_code import (
+    DEFAULT_OUTPUT_DIR,
+    DEFAULT_SOURCE_DIR,
+    ExportSummary,
     export_clean_code,
     should_exclude_dir,
     should_exclude_file,
     to_posix_relative,
+    write_summary_file,
 )
 
 
@@ -81,3 +87,54 @@ def test_export_clean_code_skips_noise_and_preserves_relative_structure(tmp_path
     assert (output / "frontend" / "vitest.config.js").exists() is False
     assert summary.skipped_dirs >= 3
     assert summary.skipped_files >= 1
+
+
+def test_write_summary_file_contains_expected_sections(tmp_path):
+    output = tmp_path / "output"
+    output.mkdir()
+    summary = ExportSummary(
+        copied_files=3,
+        skipped_files=2,
+        skipped_dirs=1,
+        failed_files=["frontend/src/bad.js"],
+    )
+    summary.skipped_reasons.update({"dir": 1, "file": 2})
+
+    summary_path = write_summary_file(output, DEFAULT_SOURCE_DIR, summary)
+    text = summary_path.read_text(encoding="utf-8")
+
+    assert summary_path.name == "export_summary.txt"
+    assert "Source:" in text
+    assert "Output:" in text
+    assert "Copied files: 3" in text
+    assert "Skipped files: 2" in text
+    assert "Skipped directories: 1" in text
+    assert "frontend/src/bad.js" in text
+
+
+def test_cli_uses_explicit_source_and_output_arguments(tmp_path):
+    source = tmp_path / "source repo"
+    output = tmp_path / "部署 目录"
+    source.mkdir()
+    (source / "backend").mkdir()
+    (source / "backend" / "app.py").write_text("print('ok')", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/export_clean_code.py",
+            "--source",
+            str(source),
+            "--output",
+            str(output),
+        ],
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert (output / "backend" / "app.py").exists() is True
+    assert (output / "export_summary.txt").exists() is True
+    assert "Copied files:" in result.stdout

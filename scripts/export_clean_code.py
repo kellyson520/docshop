@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import argparse
 from collections import Counter
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
 import os
 import shutil
+import sys
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_SOURCE_DIR = PROJECT_ROOT
+DEFAULT_OUTPUT_DIR = Path(r"C:\Users\lihuo\Desktop\新建文件夹 (2)")
 
 
 EXCLUDED_DIR_NAMES = {
@@ -130,7 +137,67 @@ def export_clean_code(source_dir: Path, output_dir: Path) -> ExportSummary:
 
             source_file = current_path / filename
             target_file = destination_dir / filename
-            shutil.copy2(source_file, target_file)
+            try:
+                shutil.copy2(source_file, target_file)
+            except OSError:
+                summary.failed_files.append(relative_file)
+                continue
             summary.copied_files += 1
 
     return summary
+
+
+def write_summary_file(output_dir: Path, source_dir: Path, summary: ExportSummary) -> Path:
+    summary_path = output_dir / "export_summary.txt"
+    lines = [
+        f"Source: {Path(source_dir).resolve()}",
+        f"Output: {Path(output_dir).resolve()}",
+        f"Copied files: {summary.copied_files}",
+        f"Skipped files: {summary.skipped_files}",
+        f"Skipped directories: {summary.skipped_dirs}",
+        "Skipped reasons:",
+    ]
+
+    if summary.skipped_reasons:
+        for key, value in sorted(summary.skipped_reasons.items()):
+            lines.append(f"- {key}: {value}")
+    else:
+        lines.append("- none: 0")
+
+    lines.append("Failed files:")
+    if summary.failed_files:
+        lines.extend(f"- {item}" for item in summary.failed_files)
+    else:
+        lines.append("- none")
+
+    summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return summary_path
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Export deployable clean code from docshop.")
+    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE_DIR)
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIR)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        summary = export_clean_code(args.source, args.output)
+        write_summary_file(args.output, args.source, summary)
+    except Exception as exc:
+        print(f"Export failed: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Source: {Path(args.source).resolve()}")
+    print(f"Output: {Path(args.output).resolve()}")
+    print(f"Copied files: {summary.copied_files}")
+    print(f"Skipped files: {summary.skipped_files}")
+    print(f"Skipped directories: {summary.skipped_dirs}")
+    print(f"Failed files: {len(summary.failed_files)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
