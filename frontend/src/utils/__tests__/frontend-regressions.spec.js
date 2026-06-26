@@ -193,9 +193,9 @@ describe('frontend issue regression guards', () => {
 
     expect(source).toMatch(/<el-dialog[\s\S]*append-to-body/)
     expect(source).toMatch(/<el-dialog[\s\S]*class="announcement-dialog"/)
-    expect(source).toMatch(/<el-dialog[\s\S]*body-class="announcement-dialog__body"/)
-    expect(source).toMatch(/\.announcement-dialog__body[\s\S]*max-height:\s*calc\(100vh - 220px\)/)
-    expect(source).toMatch(/\.announcement-dialog__body[\s\S]*overflow-y:\s*auto/)
+    expect(source).toMatch(/body-class="announcement-dialog__body"|class="announcement-editor"/)
+    expect(source).toMatch(/(\.announcement-dialog__body|\.announcement-editor)[\s\S]*max-height:\s*calc\(100vh - 220px\)/)
+    expect(source).toMatch(/(\.announcement-dialog__body|\.announcement-editor)[\s\S]*overflow-y:\s*auto/)
   })
 
   it('TrackingDashboard uses tracking display helpers without fetching MobileModels CSV directly', () => {
@@ -212,6 +212,25 @@ describe('frontend issue regression guards', () => {
     expect(source).toMatch(/urlApi\.createObjectURL\(blob\)/)
     expect(source).toMatch(/try \{[\s\S]*link\.click\(\)[\s\S]*\} finally \{[\s\S]*urlApi\.revokeObjectURL\(url\)/)
     expect(source).toMatch(/try \{[\s\S]*document\.body\.removeChild\(link\)[\s\S]*\} catch/)
+  })
+
+  it('TrackingDashboard renders monitoring sections as clickable modules while preserving logs table', () => {
+    const source = readSource('src/views/admin/TrackingDashboard.vue')
+    const logsTableStart = source.indexOf('<el-table :data="logRows"')
+    const logsTableEnd = source.indexOf('</el-table>', logsTableStart)
+    const logsTable = logsTableStart >= 0 && logsTableEnd >= 0
+      ? source.slice(logsTableStart, logsTableEnd)
+      : source
+
+    expect(source).toContain('class="tracking-module-grid"')
+    expect(source).toContain('class="tracking-module-card"')
+    expect(source).toContain('openTrackingModule(module.key)')
+    expect(source).toContain('trackingModuleDialogVisible')
+    expect(source).toContain('activeTrackingModule')
+    expect(source).toContain('class="tracking-module-dialog"')
+    expect(logsTable).toContain('class="logs-table"')
+    expect(logsTable).toContain('openAccessInfoDialog(row)')
+    expect(logsTable).toContain('label="访问信息"')
   })
 
   it('TrackingDashboard keeps the merged access-info card/dialog and avoids legacy os/browser columns', () => {
@@ -231,6 +250,15 @@ describe('frontend issue regression guards', () => {
     expect(logsTable).toContain('label="访问信息"')
     expect(logsTable).not.toMatch(/label="操作系统"|label="浏览器"|prop="os_name"|prop="browser_name"/)
     expect(source).not.toMatch(/<el-table-column[^>]+prop="os_name"[\s\S]*<el-table-column[^>]+prop="browser_name"/)
+  })
+
+  it('TrackingDashboard keeps shared server_ip_context rendering separate from visitor log fields', () => {
+    const source = readSource('src/views/admin/TrackingDashboard.vue')
+
+    expect(source).toContain('server_ip_context')
+    expect(source).toContain('buildServerIpContextDetails')
+    expect(source).toContain('服务器出口 IP 情报')
+    expect(source).toContain('tracking-info-card__meta--server')
   })
 
   it('global workspace skin does not force every logo text to near-white', () => {
@@ -511,6 +539,26 @@ describe('frontend issue regression guards', () => {
     expect(source).toContain('previewQueueState')
     expect(source).toContain('preview-storage-breakdown')
     expect(source).toContain('preview-largest-files')
+  })
+
+  it('ProjectDetail supports project folders and moving files without changing file table behavior', () => {
+    const viewSource = readSource('src/views/admin/ProjectDetail.vue')
+    const apiSource = readSource('src/api/project.js')
+
+    expect(apiSource).toContain('getProjectFolders')
+    expect(apiSource).toContain('createProjectFolder')
+    expect(apiSource).toContain('renameProjectFolder')
+    expect(apiSource).toContain('deleteProjectFolder')
+    expect(apiSource).toContain('moveProjectFileToFolder')
+    expect(viewSource).toContain('folder-toolbar')
+    expect(viewSource).toContain('folder-grid')
+    expect(viewSource).toContain('folder-card')
+    expect(viewSource).toContain('currentFolderId')
+    expect(viewSource).toContain('filteredFiles')
+    expect(viewSource).toContain('openMoveFileDialog')
+    expect(viewSource).toContain('moveFileDialogVisible')
+    expect(viewSource).toContain('folder_id: currentFolderId.value')
+    expect(viewSource).toContain('moveProjectFileToFolder')
   })
 
 })

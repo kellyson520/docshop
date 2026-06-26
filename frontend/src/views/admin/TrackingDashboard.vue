@@ -57,296 +57,179 @@
       </div>
     </el-card>
 
-    <el-card shadow="never" class="config-card mb-4">
-      <template #header>
-        <div class="card-header">
-          <span class="card-title">
-            <el-icon><Setting /></el-icon>
-            追踪配置
-          </span>
-        </div>
-      </template>
+    <section class="tracking-module-grid" aria-label="追踪监控模块">
+      <button
+        v-for="module in trackingModules"
+        :key="module.key"
+        type="button"
+        class="tracking-module-card"
+        :class="`tracking-module-card--${module.tone}`"
+        @click="openTrackingModule(module.key)"
+      >
+        <span class="tracking-module-card__icon">
+          <el-icon><component :is="module.icon" /></el-icon>
+        </span>
+        <span class="tracking-module-card__body">
+          <span class="tracking-module-card__label">{{ module.label }}</span>
+          <strong class="tracking-module-card__value">{{ module.value }}</strong>
+          <span class="tracking-module-card__desc">{{ module.description }}</span>
+        </span>
+        <span class="tracking-module-card__action">查看详情</span>
+      </button>
+    </section>
 
-      <div class="config-grid" v-if="config">
-        <div class="config-item">
-          <label class="config-label">总开关</label>
-          <el-switch
-            v-model="config.enable_tracking"
-            :active-value="1"
-            :inactive-value="0"
-            @change="updateConfig('enable_tracking', $event)"
-          />
-        </div>
-        <div class="config-item">
-          <label class="config-label">IP 追踪</label>
-          <el-switch
-            v-model="config.enable_ip_tracking"
-            :active-value="1"
-            :inactive-value="0"
-            @change="updateConfig('enable_ip_tracking', $event)"
-          />
-        </div>
-        <div class="config-item">
-          <label class="config-label">设备追踪</label>
-          <el-switch
-            v-model="config.enable_device_tracking"
-            :active-value="1"
-            :inactive-value="0"
-            @change="updateConfig('enable_device_tracking', $event)"
-          />
-        </div>
-        <div class="config-item">
-          <label class="config-label">位置追踪</label>
-          <el-switch
-            v-model="config.enable_location_tracking"
-            :active-value="1"
-            :inactive-value="0"
-            @change="updateConfig('enable_location_tracking', $event)"
-          />
-        </div>
-        <div class="config-item">
-          <label class="config-label">行为追踪</label>
-          <el-switch
-            v-model="config.enable_behavior_tracking"
-            :active-value="1"
-            :inactive-value="0"
-            @change="updateConfig('enable_behavior_tracking', $event)"
-          />
-        </div>
-        <div class="config-item">
-          <label class="config-label">IP 匿名化</label>
-          <el-switch
-            v-model="config.anonymize_ip"
-            :active-value="1"
-            :inactive-value="0"
-            @change="updateConfig('anonymize_ip', $event)"
-          />
-        </div>
-        <div class="config-item full-width">
-          <label class="config-label">数据保留天数</label>
-          <el-slider
-            v-model="config.data_retention_days"
-            :min="1"
-            :max="365"
-            show-stops
-            @change="updateConfig('data_retention_days', $event)"
-          />
-          <span class="slider-value">{{ config.data_retention_days }} 天</span>
-        </div>
-      </div>
-    </el-card>
-
-    <el-row :gutter="20" class="mb-4">
-      <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="never" class="stat-card">
-          <div class="stat-icon bg-primary">
-            <el-icon><View /></el-icon>
+    <el-dialog
+      v-model="trackingModuleDialogVisible"
+      :title="activeTrackingModule?.label || '追踪详情'"
+      width="min(1080px, 94vw)"
+      destroy-on-close
+      class="tracking-module-dialog"
+    >
+      <div v-if="activeTrackingModule" class="tracking-module-detail">
+        <div class="tracking-module-detail__hero">
+          <div>
+            <p>{{ activeTrackingModule.description }}</p>
+            <h3>{{ activeTrackingModule.value }}</h3>
           </div>
-          <div class="stat-content">
-            <div class="stat-value">{{ stats.total_visits || 0 }}</div>
-            <div class="stat-label">总访问量 · {{ currentPeriodLabel }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="never" class="stat-card">
-          <div class="stat-icon bg-success">
-            <el-icon><User /></el-icon>
-          </div>
-          <div class="stat-content">
-            <div class="stat-value">{{ stats.unique_visitors || 0 }}</div>
-            <div class="stat-label">独立访客 · {{ currentPeriodLabel }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="never" class="stat-card">
-          <div class="stat-icon bg-warning">
-            <el-icon><Timer /></el-icon>
-          </div>
-          <div class="stat-content">
-            <div class="stat-value">{{ stats.response_time?.avg_ms || 0 }}ms</div>
-            <div class="stat-label">平均响应时间 · {{ currentPeriodLabel }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="never" class="stat-card">
-          <div class="stat-icon bg-info">
-            <el-icon><Clock /></el-icon>
-          </div>
-          <div class="stat-content">
-            <div class="stat-value">{{ realtimeStats.online_sessions || 0 }}</div>
-            <div class="stat-label">在线会话 · {{ recentWindowLabel }}</div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <el-card shadow="never" class="mb-4">
-      <template #header>
-        <div class="card-header">
-          <span class="card-title">
-            <el-icon><DataLine /></el-icon>
-            实时统计
-          </span>
-          <span class="refresh-time">{{ recentWindowLabel }} · 更新于 {{ lastUpdateTime }}</span>
-        </div>
-      </template>
-
-      <div class="realtime-stats">
-        <div class="realtime-stat-item">
-          <div class="realtime-value">{{ realtimeStats.recent_visits || 0 }}</div>
-          <div class="realtime-label">{{ recentWindowLabel }}访问</div>
-        </div>
-        <div class="realtime-stat-item">
-          <div class="realtime-value">{{ realtimeStats.online_sessions || 0 }}</div>
-          <div class="realtime-label">{{ recentWindowLabel }}在线会话</div>
-        </div>
-        <div class="realtime-stat-item">
-          <div class="realtime-value">{{ realtimeStats.active_users?.length || 0 }}</div>
-          <div class="realtime-label">{{ recentWindowLabel }}活跃用户</div>
-        </div>
-      </div>
-
-      <div class="realtime-detail-grid">
-        <div class="top-paths top-paths--wide" v-if="realtimeStats.top_paths?.length">
-          <h3>热门路径 · {{ recentWindowLabel }}</h3>
-          <el-table :data="realtimeStats.top_paths" size="small" stripe class="realtime-path-table">
-            <el-table-column prop="path" label="路径" min-width="520" show-overflow-tooltip />
-            <el-table-column prop="count" label="访问次数" width="140" align="center" />
-          </el-table>
+          <el-tag size="small" type="info">{{ activeTrackingModule.badge }}</el-tag>
         </div>
 
-        <div class="top-paths" v-if="realtimeStats.active_users?.length">
-          <h3>活跃用户 · {{ recentWindowLabel }}</h3>
-          <el-table :data="realtimeStats.active_users" size="small" stripe>
-            <el-table-column prop="user_id" label="用户 ID" min-width="220" show-overflow-tooltip />
-            <el-table-column prop="count" label="访问次数" width="120" align="center" />
-          </el-table>
-        </div>
-      </div>
-    </el-card>
-
-    <el-card shadow="never" class="mb-4">
-      <template #header>
-        <div class="card-header">
-          <span class="card-title">
-            <el-icon><TrendCharts /></el-icon>
-            访问统计
-          </span>
-          <span class="metric-chip">{{ currentPeriodLabel }} · {{ trendGranularityLabel }}</span>
-        </div>
-      </template>
-
-      <div class="distribution-section">
-        <h3>设备与环境分布</h3>
-        <div class="environment-grid">
-          <section class="distribution-browser-card distribution-item environment-card">
-            <div class="section-caption">
-              <h4>浏览器</h4>
-              <span>作为主卡展示高频环境</span>
+        <section v-if="activeTrackingModule.key === 'config'" class="tracking-module-panel">
+          <div class="config-grid" v-if="config">
+            <div class="config-item">
+              <label class="config-label">总开关</label>
+              <el-switch v-model="config.enable_tracking" :active-value="1" :inactive-value="0" @change="updateConfig('enable_tracking', $event)" />
             </div>
-            <el-table :data="browserDistributionRows" size="small" stripe>
-              <el-table-column prop="label" label="浏览器" />
-              <el-table-column prop="count" label="数量" width="80" align="center" />
-            </el-table>
-          </section>
-
-          <section class="distribution-item distribution-compact-card environment-card">
-            <div class="section-caption compact-caption">
-              <h4>设备类型</h4>
-              <span>紧凑概览</span>
+            <div class="config-item">
+              <label class="config-label">IP 追踪</label>
+              <el-switch v-model="config.enable_ip_tracking" :active-value="1" :inactive-value="0" @change="updateConfig('enable_ip_tracking', $event)" />
             </div>
-            <div class="compact-metric-list">
-              <div
-                v-for="item in deviceDistributionRows"
-                :key="item.label"
-                class="compact-metric-row"
-              >
-                <span>{{ item.label }}</span>
-                <strong>{{ item.count }}</strong>
+            <div class="config-item">
+              <label class="config-label">设备追踪</label>
+              <el-switch v-model="config.enable_device_tracking" :active-value="1" :inactive-value="0" @change="updateConfig('enable_device_tracking', $event)" />
+            </div>
+            <div class="config-item">
+              <label class="config-label">位置追踪</label>
+              <el-switch v-model="config.enable_location_tracking" :active-value="1" :inactive-value="0" @change="updateConfig('enable_location_tracking', $event)" />
+            </div>
+            <div class="config-item">
+              <label class="config-label">行为追踪</label>
+              <el-switch v-model="config.enable_behavior_tracking" :active-value="1" :inactive-value="0" @change="updateConfig('enable_behavior_tracking', $event)" />
+            </div>
+            <div class="config-item">
+              <label class="config-label">IP 匿名化</label>
+              <el-switch v-model="config.anonymize_ip" :active-value="1" :inactive-value="0" @change="updateConfig('anonymize_ip', $event)" />
+            </div>
+            <div class="config-item full-width">
+              <label class="config-label">数据保留天数</label>
+              <el-slider v-model="config.data_retention_days" :min="1" :max="365" show-stops @change="updateConfig('data_retention_days', $event)" />
+              <span class="slider-value">{{ config.data_retention_days }} 天</span>
+            </div>
+          </div>
+        </section>
+
+        <section v-else-if="activeTrackingModule.key === 'overview'" class="tracking-module-panel">
+          <div class="module-metric-grid">
+            <div class="module-metric"><span>总访问量</span><strong>{{ stats.total_visits || 0 }}</strong></div>
+            <div class="module-metric"><span>独立访客</span><strong>{{ stats.unique_visitors || 0 }}</strong></div>
+            <div class="module-metric"><span>平均响应</span><strong>{{ stats.response_time?.avg_ms || 0 }}ms</strong></div>
+            <div class="module-metric"><span>在线会话</span><strong>{{ realtimeStats.online_sessions || 0 }}</strong></div>
+          </div>
+        </section>
+
+        <section v-else-if="activeTrackingModule.key === 'realtime'" class="tracking-module-panel">
+          <div class="realtime-stats">
+            <div class="realtime-stat-item"><div class="realtime-value">{{ realtimeStats.recent_visits || 0 }}</div><div class="realtime-label">{{ recentWindowLabel }}访问</div></div>
+            <div class="realtime-stat-item"><div class="realtime-value">{{ realtimeStats.online_sessions || 0 }}</div><div class="realtime-label">{{ recentWindowLabel }}在线会话</div></div>
+            <div class="realtime-stat-item"><div class="realtime-value">{{ realtimeStats.active_users?.length || 0 }}</div><div class="realtime-label">{{ recentWindowLabel }}活跃用户</div></div>
+          </div>
+          <div class="realtime-detail-grid">
+            <div class="top-paths top-paths--wide" v-if="realtimeStats.top_paths?.length">
+              <h3>热门路径 · {{ recentWindowLabel }}</h3>
+              <el-table :data="realtimeStats.top_paths" size="small" stripe class="realtime-path-table">
+                <el-table-column prop="path" label="路径" min-width="520" show-overflow-tooltip />
+                <el-table-column prop="count" label="访问次数" width="140" align="center" />
+              </el-table>
+            </div>
+            <div class="top-paths" v-if="realtimeStats.active_users?.length">
+              <h3>活跃用户 · {{ recentWindowLabel }}</h3>
+              <el-table :data="realtimeStats.active_users" size="small" stripe>
+                <el-table-column prop="user_id" label="用户 ID" min-width="220" show-overflow-tooltip />
+                <el-table-column prop="count" label="访问次数" width="120" align="center" />
+              </el-table>
+            </div>
+          </div>
+        </section>
+
+        <section v-else-if="activeTrackingModule.key === 'environment'" class="tracking-module-panel">
+          <div class="environment-grid">
+            <section class="distribution-browser-card distribution-item environment-card">
+              <div class="section-caption"><h4>浏览器</h4><span>高频环境</span></div>
+              <el-table :data="browserDistributionRows" size="small" stripe>
+                <el-table-column prop="label" label="浏览器" />
+                <el-table-column prop="count" label="数量" width="80" align="center" />
+              </el-table>
+            </section>
+            <section class="distribution-item distribution-compact-card environment-card">
+              <div class="section-caption compact-caption"><h4>设备类型</h4><span>紧凑概览</span></div>
+              <div class="compact-metric-list">
+                <div v-for="item in deviceDistributionRows" :key="item.label" class="compact-metric-row"><span>{{ item.label }}</span><strong>{{ item.count }}</strong></div>
               </div>
-            </div>
-          </section>
+            </section>
+            <section class="distribution-item distribution-compact-card environment-card">
+              <div class="section-caption compact-caption"><h4>操作系统</h4><span>按访问量排序</span></div>
+              <el-table :data="osDistributionRows" size="small" stripe class="compact-os-table">
+                <el-table-column prop="label" label="系统" />
+                <el-table-column prop="count" label="数量" width="80" align="center" />
+              </el-table>
+            </section>
+          </div>
+        </section>
 
-          <section class="distribution-item distribution-compact-card environment-card">
-            <div class="section-caption compact-caption">
-              <h4>操作系统</h4>
-              <span>按访问量排序</span>
-            </div>
-            <el-table :data="osDistributionRows" size="small" stripe class="compact-os-table">
-              <el-table-column prop="label" label="系统" />
-              <el-table-column prop="count" label="数量" width="80" align="center" />
-            </el-table>
-          </section>
-        </div>
-      </div>
-
-      <div class="trend-section trend-card trend-card--wide">
-        <div class="trend-card__header">
-          <h3>{{ trendTitle }}</h3>
-          <span>访问、访客、响应、错误率完整铺满</span>
-        </div>
-        <el-table :data="trendRows" size="small" stripe class="trend-table-full trend-table-dense">
-          <el-table-column prop="label" :label="trendColumnLabel" min-width="160" show-overflow-tooltip />
-          <el-table-column prop="visits" label="访问量" min-width="110" align="center" />
-          <el-table-column prop="visitors" label="访客数" min-width="110" align="center" />
-          <el-table-column prop="avg_response_time_ms" label="平均响应" min-width="120" align="center">
-            <template #default="{ row }">{{ formatTrendMs(row.avg_response_time_ms) }}</template>
-          </el-table-column>
-          <el-table-column prop="min_response_time_ms" label="最快响应" min-width="120" align="center">
-            <template #default="{ row }">{{ formatTrendMs(row.min_response_time_ms) }}</template>
-          </el-table-column>
-          <el-table-column prop="max_response_time_ms" label="最慢响应" min-width="120" align="center">
-            <template #default="{ row }">{{ formatTrendMs(row.max_response_time_ms) }}</template>
-          </el-table-column>
-          <el-table-column prop="error_count" label="错误数" min-width="100" align="center" />
-          <el-table-column prop="error_rate" label="错误率" min-width="100" align="center">
-            <template #default="{ row }">{{ formatTrendPercent(row.error_rate) }}</template>
-          </el-table-column>
-        </el-table>
-      </div>
-
-      <div class="distribution-section secondary-distribution">
-        <h3>状态与地域</h3>
-        <div class="distribution-grid">
-          <div class="distribution-item">
-            <h4>状态码</h4>
-            <el-table :data="statusDistributionRows" size="small" stripe>
-              <el-table-column prop="status" label="状态" />
-              <el-table-column prop="count" label="数量" width="80" align="center" />
+        <section v-else-if="activeTrackingModule.key === 'trend'" class="tracking-module-panel">
+          <div class="trend-section trend-card trend-card--wide">
+            <div class="trend-card__header"><h3>{{ trendTitle }}</h3><span>访问、访客、响应、错误率完整铺满</span></div>
+            <el-table :data="trendRows" size="small" stripe class="trend-table-full trend-table-dense">
+              <el-table-column prop="label" :label="trendColumnLabel" min-width="160" show-overflow-tooltip />
+              <el-table-column prop="visits" label="访问量" min-width="110" align="center" />
+              <el-table-column prop="visitors" label="访客数" min-width="110" align="center" />
+              <el-table-column prop="avg_response_time_ms" label="平均响应" min-width="120" align="center"><template #default="{ row }">{{ formatTrendMs(row.avg_response_time_ms) }}</template></el-table-column>
+              <el-table-column prop="min_response_time_ms" label="最快响应" min-width="120" align="center"><template #default="{ row }">{{ formatTrendMs(row.min_response_time_ms) }}</template></el-table-column>
+              <el-table-column prop="max_response_time_ms" label="最慢响应" min-width="120" align="center"><template #default="{ row }">{{ formatTrendMs(row.max_response_time_ms) }}</template></el-table-column>
+              <el-table-column prop="error_count" label="错误数" min-width="100" align="center" />
+              <el-table-column prop="error_rate" label="错误率" min-width="100" align="center"><template #default="{ row }">{{ formatTrendPercent(row.error_rate) }}</template></el-table-column>
             </el-table>
           </div>
+        </section>
 
-          <div class="distribution-item">
-            <h4>访问地域</h4>
-            <el-table :data="countryDistributionRows" size="small" stripe>
-              <el-table-column prop="country" label="国家/地区" />
-              <el-table-column prop="count" label="数量" width="80" align="center" />
-            </el-table>
-          </div>
-
-          <div class="distribution-item">
-            <h4>响应时间</h4>
-            <div class="response-grid">
-              <div>
-                <strong>{{ stats.response_time?.min_ms || 0 }}ms</strong>
-                <span>最小</span>
-              </div>
-              <div>
-                <strong>{{ stats.response_time?.avg_ms || 0 }}ms</strong>
-                <span>平均</span>
-              </div>
-              <div>
-                <strong>{{ stats.response_time?.max_ms || 0 }}ms</strong>
-                <span>最大</span>
+        <section v-else-if="activeTrackingModule.key === 'status'" class="tracking-module-panel">
+          <div class="distribution-grid">
+            <div class="distribution-item">
+              <h4>状态码</h4>
+              <el-table :data="statusDistributionRows" size="small" stripe>
+                <el-table-column prop="status" label="状态" />
+                <el-table-column prop="count" label="数量" width="80" align="center" />
+              </el-table>
+            </div>
+            <div class="distribution-item">
+              <h4>访问地域</h4>
+              <el-table :data="countryDistributionRows" size="small" stripe>
+                <el-table-column prop="country" label="国家/地区" />
+                <el-table-column prop="count" label="数量" width="80" align="center" />
+              </el-table>
+            </div>
+            <div class="distribution-item">
+              <h4>响应时间</h4>
+              <div class="response-grid">
+                <div><strong>{{ stats.response_time?.min_ms || 0 }}ms</strong><span>最小</span></div>
+                <div><strong>{{ stats.response_time?.avg_ms || 0 }}ms</strong><span>平均</span></div>
+                <div><strong>{{ stats.response_time?.max_ms || 0 }}ms</strong><span>最大</span></div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
       </div>
-    </el-card>
+    </el-dialog>
 
     <el-card shadow="never" class="mb-4">
       <template #header>
@@ -430,6 +313,15 @@
               <div class="tracking-info-card__secondary">{{ getTrackingInfoCard(row).secondary }}</div>
               <div class="tracking-info-card__meta">{{ getTrackingInfoCard(row).location }}</div>
               <div class="tracking-info-card__meta">{{ getTrackingInfoCard(row).environment }}</div>
+              <div v-if="getTrackingInfoCard(row).serverIpSummary" class="tracking-info-card__meta tracking-info-card__meta--server">
+                {{ getTrackingInfoCard(row).serverIpSummary }}
+              </div>
+              <div v-if="getTrackingInfoCard(row).serverIpRisk" class="tracking-info-card__meta tracking-info-card__meta--server">
+                {{ getTrackingInfoCard(row).serverIpRisk }}
+              </div>
+              <div v-if="getTrackingInfoCard(row).serverIpNetwork" class="tracking-info-card__meta tracking-info-card__meta--server">
+                {{ getTrackingInfoCard(row).serverIpNetwork }}
+              </div>
             </div>
           </template>
         </el-table-column>
@@ -490,6 +382,23 @@
             </el-descriptions-item>
             <el-descriptions-item label="环境">
               {{ selectedAccessInfoCard.environment }}
+            </el-descriptions-item>
+          </el-descriptions>
+
+          <el-divider v-if="selectedAccessInfoServerContextDetails.length">服务器出口 IP 情报</el-divider>
+
+          <el-descriptions
+            v-if="selectedAccessInfoServerContextDetails.length"
+            :column="2"
+            border
+            class="access-info-server-context"
+          >
+            <el-descriptions-item
+              v-for="item in selectedAccessInfoServerContextDetails"
+              :key="`server-${item.label}`"
+              :label="item.label"
+            >
+              {{ item.value }}
             </el-descriptions-item>
           </el-descriptions>
 
@@ -560,6 +469,7 @@ import {
 import { del, get, put } from '@/api/client'
 import PageHeader from '@/components/common/PageHeader.vue'
 import {
+  buildServerIpContextDetails,
   formatDevicePrimary,
   formatDeviceSecondary,
   formatDeviceTooltip,
@@ -612,6 +522,8 @@ const logsLoading = ref(false)
 const exporting = ref(false)
 const selectedAccessInfoLog = ref(null)
 const accessInfoDialogVisible = ref(false)
+const trackingModuleDialogVisible = ref(false)
+const activeTrackingModuleKey = ref('overview')
 
 const cleanupDays = ref(90)
 const cleanupLoading = ref(false)
@@ -658,11 +570,74 @@ const osDistributionRows = computed(() => (stats.value?.os_distribution || []).m
 const statusDistributionRows = computed(() => stats.value?.status_distribution || [])
 const countryDistributionRows = computed(() => stats.value?.country_distribution || [])
 const logRows = computed(() => logs.value?.items || [])
+const serverIpContext = computed(() => logs.value?.server_ip_context || null)
+const trackingModules = computed(() => [
+  {
+    key: 'config',
+    label: '追踪配置',
+    value: config.value?.enable_tracking ? '已开启' : '已关闭',
+    description: '数据采集开关、匿名化与保留周期',
+    badge: '配置',
+    tone: 'slate',
+    icon: Setting,
+  },
+  {
+    key: 'overview',
+    label: '核心概览',
+    value: `${stats.value.total_visits || 0}`,
+    description: `${currentPeriodLabel.value} 总访问量`,
+    badge: currentPeriodLabel.value,
+    tone: 'blue',
+    icon: View,
+  },
+  {
+    key: 'realtime',
+    label: '实时动态',
+    value: `${realtimeStats.value.recent_visits || 0}`,
+    description: `${recentWindowLabel.value}访问，更新于 ${lastUpdateTime.value}`,
+    badge: recentWindowLabel.value,
+    tone: 'green',
+    icon: DataLine,
+  },
+  {
+    key: 'environment',
+    label: '设备环境',
+    value: `${browserDistributionRows.value.length || 0}`,
+    description: '浏览器、设备类型与操作系统分布',
+    badge: '环境',
+    tone: 'amber',
+    icon: TrendCharts,
+  },
+  {
+    key: 'trend',
+    label: '访问趋势',
+    value: `${trendRows.value.length || 0}`,
+    description: `${trendTitle.value} · ${trendGranularityLabel.value}`,
+    badge: trendGranularityLabel.value,
+    tone: 'purple',
+    icon: Timer,
+  },
+  {
+    key: 'status',
+    label: '状态地域',
+    value: `${statusDistributionRows.value.length || 0}`,
+    description: '状态码、地域与响应时间',
+    badge: '质量',
+    tone: 'rose',
+    icon: Clock,
+  },
+])
+const activeTrackingModule = computed(() => (
+  trackingModules.value.find((item) => item.key === activeTrackingModuleKey.value) || trackingModules.value[0]
+))
 const selectedAccessInfoCard = computed(() => (
-  selectedAccessInfoLog.value ? buildTrackingInfoCard(selectedAccessInfoLog.value) : null
+  selectedAccessInfoLog.value ? buildTrackingInfoCard(selectedAccessInfoLog.value, serverIpContext.value) : null
 ))
 const selectedAccessInfoTechnicalDetails = computed(() => (
   selectedAccessInfoLog.value ? buildTrackingTechnicalDetails(selectedAccessInfoLog.value) : []
+))
+const selectedAccessInfoServerContextDetails = computed(() => (
+  buildServerIpContextDetails(serverIpContext.value)
 ))
 const logsRangeLabel = computed(() => {
   if (!logsRange.value || logsRange.value.length !== 2) return '未限定'
@@ -711,7 +686,7 @@ function formatLogTimestamp(value) {
 }
 
 function getTrackingInfoCard(row = {}) {
-  return buildTrackingInfoCard(row)
+  return buildTrackingInfoCard(row, serverIpContext.value)
 }
 
 function formatAccessInfoSystem(row = {}) {
@@ -729,6 +704,11 @@ function formatAccessInfoBrowser(row = {}) {
 function openAccessInfoDialog(row) {
   selectedAccessInfoLog.value = row
   accessInfoDialogVisible.value = true
+}
+
+function openTrackingModule(key) {
+  activeTrackingModuleKey.value = key
+  trackingModuleDialogVisible.value = true
 }
 
 function formatTrendMs(value) {
@@ -1086,6 +1066,166 @@ onUnmounted(() => {
 
 .metric-chip {
   font-size: 12px;
+}
+
+.tracking-module-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.tracking-module-card {
+  min-height: 150px;
+  padding: 18px;
+  border: 1px solid var(--border-color-light, #e4e9f0);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 85% 18%, rgba(47, 93, 140, 0.10), transparent 30%),
+    linear-gradient(145deg, rgba(255,255,255,0.98), rgba(246,248,251,0.96));
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.tracking-module-card:hover,
+.tracking-module-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--workspace-blue, #2f5d8c);
+  box-shadow: 0 14px 32px rgba(47, 93, 140, 0.14);
+  outline: none;
+}
+
+.tracking-module-card__icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: linear-gradient(135deg, #2f5d8c, #5d87b0);
+  box-shadow: 0 10px 22px rgba(47, 93, 140, 0.18);
+}
+
+.tracking-module-card--green .tracking-module-card__icon {
+  background: linear-gradient(135deg, #20835a, #35b779);
+}
+
+.tracking-module-card--amber .tracking-module-card__icon {
+  background: linear-gradient(135deg, #b66a00, #f0a42a);
+}
+
+.tracking-module-card--purple .tracking-module-card__icon {
+  background: linear-gradient(135deg, #6155a6, #8c7ae6);
+}
+
+.tracking-module-card--rose .tracking-module-card__icon {
+  background: linear-gradient(135deg, #a9445b, #de6b82);
+}
+
+.tracking-module-card--slate .tracking-module-card__icon {
+  background: linear-gradient(135deg, #3f4b5f, #6b778c);
+}
+
+.tracking-module-card__body {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.tracking-module-card__label {
+  font-size: 13px;
+  color: var(--text-tertiary, #7a8798);
+}
+
+.tracking-module-card__value {
+  font-size: 24px;
+  color: var(--text-primary, #172033);
+  line-height: 1.1;
+}
+
+.tracking-module-card__desc {
+  font-size: 13px;
+  color: var(--text-secondary, #475569);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tracking-module-card__action {
+  grid-column: 1 / -1;
+  align-self: end;
+  font-size: 12px;
+  color: var(--workspace-blue, #2f5d8c);
+}
+
+.tracking-module-detail {
+  display: grid;
+  gap: 16px;
+}
+
+.tracking-module-detail__hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f8fafc, #e6eef5);
+  border: 1px solid var(--border-color-light, #e4e9f0);
+}
+
+.tracking-module-detail__hero p,
+.tracking-module-detail__hero h3 {
+  margin: 0;
+}
+
+.tracking-module-detail__hero p {
+  color: var(--text-tertiary, #7a8798);
+  font-size: 13px;
+}
+
+.tracking-module-detail__hero h3 {
+  margin-top: 4px;
+  font-size: 28px;
+  color: var(--text-primary, #172033);
+}
+
+.tracking-module-panel {
+  min-width: 0;
+}
+
+.tracking-module-panel .trend-section {
+  margin-top: 0;
+}
+
+.module-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.module-metric {
+  padding: 16px;
+  border: 1px solid var(--border-color-light, #e4e9f0);
+  border-radius: 12px;
+  background: var(--surface-muted, #f6f8fb);
+  display: grid;
+  gap: 6px;
+}
+
+.module-metric span {
+  color: var(--text-tertiary, #7a8798);
+  font-size: 12px;
+}
+
+.module-metric strong {
+  color: var(--workspace-blue, #2f5d8c);
+  font-size: 24px;
 }
 
 .card-header {
@@ -1504,6 +1644,10 @@ onUnmounted(() => {
   text-overflow: ellipsis;
 }
 
+.tracking-info-card__meta--server {
+  color: var(--el-color-primary);
+}
+
 .access-info-dialog__content {
   display: grid;
   gap: 16px;
@@ -1542,6 +1686,7 @@ onUnmounted(() => {
 }
 
 .access-info-summary,
+.access-info-server-context,
 .access-info-technical {
   width: 100%;
 }
@@ -1555,6 +1700,17 @@ onUnmounted(() => {
 
 .cleanup-label {
   font-size: 14px;
+}
+
+@media (max-width: 1100px) {
+  .tracking-module-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .module-metric-grid,
+  .environment-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 768px) {
@@ -1582,6 +1738,8 @@ onUnmounted(() => {
   }
 
   .config-grid,
+  .tracking-module-grid,
+  .module-metric-grid,
   .realtime-stats,
   .realtime-detail-grid,
   .environment-grid,

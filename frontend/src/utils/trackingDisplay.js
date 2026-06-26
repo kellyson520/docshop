@@ -35,6 +35,11 @@ function normalizeText(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function normalizeLooseText(value) {
+  if (value === null || value === undefined) return ''
+  return String(value).trim()
+}
+
 export function withDash(value) {
   if (value === null || value === undefined) return '-'
   if (typeof value === 'string' && value.trim() === '') return '-'
@@ -98,6 +103,16 @@ function getDesktopFallback(osName) {
 export function formatDevicePrimary(row = {}) {
   const resolvedDisplayName = normalizeText(row.device_display_name)
   if (resolvedDisplayName) return resolvedDisplayName
+
+  const resolvedBrand = normalizeText(row.device_brand_name)
+  const resolvedModel = normalizeText(row.device_model_name)
+  const resolvedCode = normalizeText(row.device_model_code)
+  if (resolvedModel) {
+    const resolvedName = joinParts([resolvedBrand, resolvedModel], ' ')
+    return resolvedCode && resolvedCode.toLowerCase() !== resolvedModel.toLowerCase()
+      ? `${resolvedName} / ${resolvedCode}`
+      : resolvedName
+  }
 
   const brand = normalizeText(row.device_brand)
   const model = normalizeText(row.device_model)
@@ -166,6 +181,74 @@ export function formatClientEnvironment(row = {}) {
   return joinParts([normalizeText(row.client_timezone), normalizeText(row.client_language)], ' · ') || UNKNOWN_LABEL
 }
 
+export function formatServerIpGeoSummary(serverIpContext = null) {
+  if (!serverIpContext || typeof serverIpContext !== 'object') return ''
+
+  const parts = [
+    normalizeLooseText(serverIpContext.city),
+    normalizeLooseText(serverIpContext.region),
+    normalizeLooseText(serverIpContext.countryCode || serverIpContext.country),
+  ].filter(Boolean)
+
+  return parts.length ? `服务器出口IP · ${parts.join(', ')}` : ''
+}
+
+export function formatServerIpRiskSummary(serverIpContext = null) {
+  if (!serverIpContext || typeof serverIpContext !== 'object') return ''
+
+  const parts = []
+  const fraudScore = toFiniteNumber(serverIpContext.fraudScore)
+  if (fraudScore !== null) parts.push(`风险 ${fraudScore}`)
+
+  if (serverIpContext.isResidential === true) parts.push('住宅IP')
+  else if (serverIpContext.isResidential === false) parts.push('非住宅IP')
+
+  if (serverIpContext.isBroadcast === true) parts.push('广播')
+  else if (serverIpContext.isBroadcast === false) parts.push('非广播')
+
+  return parts.join(' · ')
+}
+
+export function formatServerIpNetworkSummary(serverIpContext = null) {
+  if (!serverIpContext || typeof serverIpContext !== 'object') return ''
+
+  const asn = normalizeLooseText(serverIpContext.asn)
+  const organization = normalizeLooseText(serverIpContext.asOrganization)
+
+  if (asn && organization) return `AS${asn} · ${organization}`
+  if (asn) return `AS${asn}`
+  return organization
+}
+
+export function buildServerIpContextDetails(serverIpContext = null) {
+  if (!serverIpContext || typeof serverIpContext !== 'object') return []
+
+  const countryText = [serverIpContext.country, serverIpContext.countryCode]
+    .map(normalizeLooseText)
+    .filter(Boolean)
+    .join(' / ')
+
+  const boolLabel = (value) => {
+    if (value === true) return '是'
+    if (value === false) return '否'
+    return '-'
+  }
+
+  return [
+    { label: '出口 IP', value: toDetailValue(serverIpContext.ip) },
+    { label: '国家/地区', value: toDetailValue(countryText) },
+    { label: '省/州', value: toDetailValue(serverIpContext.region) },
+    { label: '城市', value: toDetailValue(serverIpContext.city) },
+    { label: '邮编', value: toDetailValue(serverIpContext.postalCode) },
+    { label: '时区', value: toDetailValue(serverIpContext.timezone) },
+    { label: 'ASN', value: toDetailValue(serverIpContext.asn) },
+    { label: 'AS 组织', value: toDetailValue(serverIpContext.asOrganization) },
+    { label: '风险分', value: toDetailValue(serverIpContext.fraudScore) },
+    { label: '住宅 IP', value: boolLabel(serverIpContext.isResidential) },
+    { label: '广播 IP', value: boolLabel(serverIpContext.isBroadcast) },
+  ]
+}
+
 export function getDistributionLabel(value) {
   if (!value || value === 'unknown') return UNKNOWN_LABEL
   return value
@@ -201,7 +284,7 @@ export function formatTrackingBusiness(row = {}) {
   return parts.join(' / ') || '普通访问'
 }
 
-export function buildTrackingInfoCard(row = {}) {
+export function buildTrackingInfoCard(row = {}, serverIpContext = null) {
   const toInfoCardFallback = (value) => (value === UNKNOWN_LABEL ? '-' : withDash(value))
   const title = toInfoCardFallback(formatDevicePrimary(row))
   const deviceTypeText = toInfoCardFallback(getDeviceTypeText(normalizeDeviceType(row.device_type) || row.device_type))
@@ -215,6 +298,9 @@ export function buildTrackingInfoCard(row = {}) {
     secondary,
     location,
     environment,
+    serverIpSummary: formatServerIpGeoSummary(serverIpContext),
+    serverIpRisk: formatServerIpRiskSummary(serverIpContext),
+    serverIpNetwork: formatServerIpNetworkSummary(serverIpContext),
   }
 }
 

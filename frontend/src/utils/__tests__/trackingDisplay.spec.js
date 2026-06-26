@@ -1,5 +1,6 @@
 ﻿import { describe, expect, it } from 'vitest'
 import {
+  buildServerIpContextDetails,
   buildTrackingInfoCard,
   buildTrackingTechnicalDetails,
   formatDeviceFallback,
@@ -51,6 +52,17 @@ describe('trackingDisplay', () => {
   it('prefers resolved mobile model display name when available', () => {
     expect(formatDevicePrimary({
       device_display_name: 'Huawei P40 / ANA-AL00',
+      device_type: 'mobile',
+      device_brand: 'Huawei',
+      device_model: 'ANA-AL00',
+    })).toBe('Huawei P40 / ANA-AL00')
+  })
+
+  it('builds readable device name from resolved model fields when display name is absent', () => {
+    expect(formatDevicePrimary({
+      device_brand_name: 'Huawei',
+      device_model_name: 'P40',
+      device_model_code: 'ANA-AL00',
       device_type: 'mobile',
       device_brand: 'Huawei',
       device_model: 'ANA-AL00',
@@ -229,6 +241,9 @@ describe('trackingDisplay', () => {
       secondary: 'Android 14 · Chrome Mobile WebView 126',
       location: '📍 39.9042, 116.4074 (±9m)',
       environment: 'Asia/Shanghai · zh-CN',
+      serverIpSummary: '',
+      serverIpRisk: '',
+      serverIpNetwork: '',
     })
   })
 
@@ -241,6 +256,44 @@ describe('trackingDisplay', () => {
     }).secondary).toBe('Android 14 · Chrome 124')
   })
 
+  it('adds server egress IP summaries to the tracking info card when context exists', () => {
+    const row = {
+      device_display_name: 'Huawei P40 / ANA-AL00',
+      device_type: 'mobile',
+      os_name: 'Android',
+      os_version: '14',
+      browser_name: 'Chrome',
+      browser_version: '126',
+      ip_city: 'Beijing',
+      ip_country: 'CN',
+      client_timezone: 'Asia/Shanghai',
+      client_language: 'zh-CN',
+    }
+    const serverIpContext = {
+      source: 'ippure_server_egress',
+      ip: '112.224.158.50',
+      city: 'Qingdao',
+      region: 'Shandong',
+      countryCode: 'CN',
+      fraudScore: 0,
+      isResidential: true,
+      isBroadcast: false,
+      asn: 4837,
+      asOrganization: 'China Unicom Shandong province network',
+    }
+
+    expect(buildTrackingInfoCard(row, serverIpContext)).toEqual({
+      title: 'Huawei P40 / ANA-AL00',
+      deviceTypeText: '移动端',
+      secondary: 'Android 14 · Chrome 126',
+      location: 'Beijing, CN',
+      environment: 'Asia/Shanghai · zh-CN',
+      serverIpSummary: '服务器出口IP · Qingdao, Shandong, CN',
+      serverIpRisk: '风险 0 · 住宅IP · 非广播',
+      serverIpNetwork: 'AS4837 · China Unicom Shandong province network',
+    })
+  })
+
   it('falls back to dashes for empty info card summaries', () => {
     expect(buildTrackingInfoCard({})).toEqual({
       title: '-',
@@ -248,7 +301,47 @@ describe('trackingDisplay', () => {
       secondary: '-',
       location: '-',
       environment: '-',
+      serverIpSummary: '',
+      serverIpRisk: '',
+      serverIpNetwork: '',
     })
+  })
+
+  it('builds a dedicated server IP detail list and degrades cleanly when absent', () => {
+    const serverIpContext = {
+      source: 'ippure_server_egress',
+      ip: '112.224.158.50',
+      country: 'China',
+      countryCode: 'CN',
+      region: 'Shandong',
+      city: 'Qingdao',
+      postalCode: '266000',
+      timezone: 'Asia/Shanghai',
+      asn: 4837,
+      asOrganization: 'China Unicom Shandong province network',
+      fraudScore: 0,
+      isResidential: true,
+      isBroadcast: false,
+    }
+
+    expect(buildServerIpContextDetails(serverIpContext)).toEqual([
+      { label: '出口 IP', value: '112.224.158.50' },
+      { label: '国家/地区', value: 'China / CN' },
+      { label: '省/州', value: 'Shandong' },
+      { label: '城市', value: 'Qingdao' },
+      { label: '邮编', value: '266000' },
+      { label: '时区', value: 'Asia/Shanghai' },
+      { label: 'ASN', value: '4837' },
+      { label: 'AS 组织', value: 'China Unicom Shandong province network' },
+      { label: '风险分', value: '0' },
+      { label: '住宅 IP', value: '是' },
+      { label: '广播 IP', value: '否' },
+    ])
+
+    expect(buildTrackingInfoCard({}, null).serverIpSummary).toBe('')
+    expect(buildTrackingInfoCard({}, null).serverIpRisk).toBe('')
+    expect(buildTrackingInfoCard({}, null).serverIpNetwork).toBe('')
+    expect(buildServerIpContextDetails(null)).toEqual([])
   })
 
   it('returns labeled technical details array with raw values and dash fallbacks', () => {

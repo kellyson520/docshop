@@ -63,6 +63,20 @@ vi.mock('@/api/client', () => ({
     if (url === '/admin/tracking/logs') {
       return Promise.resolve({
         total: 2,
+        server_ip_context: {
+          source: 'ippure_server_egress',
+          ip: '112.224.158.50',
+          city: 'Qingdao',
+          region: 'Shandong',
+          countryCode: 'CN',
+          fraudScore: 0,
+          isResidential: true,
+          isBroadcast: false,
+          asn: 4837,
+          asOrganization: 'China Unicom Shandong province network',
+          timezone: 'Asia/Shanghai',
+          postalCode: '266000',
+        },
         items: [{
           id: 'log-1',
           timestamp: '2026-06-16T12:00:00.789123Z',
@@ -255,17 +269,38 @@ describe('TrackingDashboard', () => {
     await flushPromises()
     await flushPromises()
 
+    expect(wrapper.find('.tracking-module-grid').exists()).toBe(true)
+    expect(wrapper.findAll('.tracking-module-card').length).toBeGreaterThanOrEqual(6)
+    expect(wrapper.text()).toContain('查看详情')
+    expect(wrapper.text()).not.toContain('???')
+
+    const realtimeModuleCard = wrapper.findAll('.tracking-module-card')
+      .find((node) => node.text().includes('实时动态'))
+    expect(realtimeModuleCard?.exists()).toBe(true)
+    await realtimeModuleCard.trigger('click')
+    await flushPromises()
     expect(wrapper.find('.top-paths--wide').exists()).toBe(true)
     expect(wrapper.find('.top-paths--wide .realtime-path-table').exists()).toBe(true)
+
+    const environmentModuleCard = wrapper.findAll('.tracking-module-card')
+      .find((node) => node.text().includes('设备环境'))
+    expect(environmentModuleCard?.exists()).toBe(true)
+    await environmentModuleCard.trigger('click')
+    await flushPromises()
     expect(wrapper.find('.distribution-browser-card').exists()).toBe(true)
     expect(wrapper.find('.environment-grid').exists()).toBe(true)
     expect(wrapper.findAll('.environment-card')).toHaveLength(3)
+
+    const trendModuleCard = wrapper.findAll('.tracking-module-card')
+      .find((node) => node.text().includes('访问趋势'))
+    expect(trendModuleCard?.exists()).toBe(true)
+    await trendModuleCard.trigger('click')
+    await flushPromises()
     expect(wrapper.find('.trend-card').exists()).toBe(true)
     expect(wrapper.find('.trend-card .trend-table-full').exists()).toBe(true)
     expect(wrapper.text()).toContain('平均响应')
     expect(wrapper.text()).toContain('错误率')
     expect(wrapper.text()).toContain('10%')
-    expect(wrapper.text()).not.toContain('???')
 
     const tableHeaders = wrapper.findAll('.logs-table .el-table__header-cell').map((cell) => cell.text())
     expect(tableHeaders).toContain('访问信息')
@@ -283,6 +318,9 @@ describe('TrackingDashboard', () => {
     expect(card.text()).toContain('Windows 11 · Edge 149')
     expect(card.text()).toContain('📍 39.9042, 116.4074 (±9m)')
     expect(card.text()).toContain('Asia/Shanghai · zh-CN')
+    expect(card.text()).toContain('服务器出口IP · Qingdao, Shandong, CN')
+    expect(card.text()).toContain('风险 0 · 住宅IP · 非广播')
+    expect(card.text()).toContain('AS4837 · China Unicom Shandong province network')
     expect(wrapper.text()).toContain('visitor-…')
     expect(wrapper.find('.access-info-dialog').exists()).toBe(false)
 
@@ -310,6 +348,10 @@ describe('TrackingDashboard', () => {
     expect(dialog.text()).toContain('Asia/Shanghai · zh-CN')
     expect(dialog.text()).toContain('访客 ID')
     expect(dialog.text()).toContain('visitor-abcdef-123456')
+    expect(dialog.text()).toContain('服务器出口 IP 情报')
+    expect(dialog.text()).toContain('112.224.158.50')
+    expect(dialog.text()).toContain('266000')
+    expect(dialog.text()).toContain('China Unicom Shandong province network')
 
     expect(wrapper.text()).not.toContain('2026-06-16T12:00:00.789123Z')
     expect(wrapper.text()).not.toContain('.789123')
