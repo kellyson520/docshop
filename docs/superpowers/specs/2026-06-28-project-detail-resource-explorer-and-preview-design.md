@@ -72,6 +72,8 @@ Folder row actions should be limited to:
 - rename
 - delete
 
+Folder rows should open on single click, matching the lightweight Windows-style browsing expectation requested for this page. Row-level action buttons and dropdown triggers must stop propagation so single-click open does not interfere with rename/delete operations.
+
 ### File Rows
 
 File rows keep the current document-centric behavior:
@@ -119,9 +121,16 @@ The title treatment should be the same for DOC and PDF preview modes wherever th
 ## Interaction Notes
 
 - Opening a folder should continue to update current folder context and route state.
+- Folder opening should use single click rather than double click.
 - Returning to root or parent should remain one-click.
 - Empty-folder state should clearly indicate that the directory is empty, not that loading failed.
 - Mobile should remain aligned with the same resource model so desktop and mobile do not drift in behavior.
+
+## Follow-Up Sequencing
+
+This spec remains focused on resource explorer and preview presentation changes.
+
+After the implementation plan for this spec is completed, the next work item should be a separate lightweight repair pass for the currently non-working HTML diff capability. That follow-up should start with root-cause investigation and then prefer the smallest viable fallback implementation instead of a heavy full-featured diff pipeline rewrite.
 
 ## Testing Strategy
 
@@ -130,8 +139,9 @@ Add or update targeted tests for:
 1. desktop mixed resource rendering includes folders in the same table flow as files
 2. folders are ordered before files
 3. folder rows expose folder actions instead of file preview actions
-4. preview title text is preserved in the rendered preview dialog title/skeleton path
-5. preview container uses the reduced shared scaling treatment for DOC/PDF paths
+4. folder rows open on single click without breaking row action controls
+5. preview title text is preserved in the rendered preview dialog title/skeleton path
+6. preview container uses the reduced shared scaling treatment for DOC/PDF paths
 
 Prefer targeted component tests over broad snapshot-only assertions.
 
@@ -158,6 +168,7 @@ Implementation will be accepted when:
 
 - desktop no longer shows folders as separate cards above the table
 - folders and files appear in a single Windows-like list with folders first
+- folders open on single click
 - DOC/PDF preview is visibly less oversized
 - HTML skeleton title remains present, centered, and bold
 - targeted frontend tests cover the new rendering rules
