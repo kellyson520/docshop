@@ -224,7 +224,7 @@ def test_admin_access_logs_can_filter_page_views_and_visitor_id():
         db.close()
 
 
-def test_admin_access_logs_include_server_ip_context(monkeypatch):
+def test_admin_access_logs_include_per_row_visitor_ip_context():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(bind=engine)
@@ -246,18 +246,6 @@ def test_admin_access_logs_include_server_ip_context(monkeypatch):
         )
         db.commit()
 
-        monkeypatch.setattr(
-            tracking_admin,
-            "fetch_server_ip_context",
-            lambda: {
-                "source": "ippure_server_egress",
-                "ip": "112.224.158.50",
-                "city": "Qingdao",
-                "region": "Shandong",
-                "countryCode": "CN",
-            },
-        )
-
         result = get_access_logs(
             page=1,
             page_size=50,
@@ -273,9 +261,11 @@ def test_admin_access_logs_include_server_ip_context(monkeypatch):
         )
 
         data = result.data
-        assert data["server_ip_context"]["source"] == "ippure_server_egress"
-        assert data["server_ip_context"]["ip"] == "112.224.158.50"
         assert data["items"][0]["id"] == "page-view-log"
+        assert data["items"][0]["visitor_ip_context"]["source"] == "access_log_visitor_ip"
+        assert data["items"][0]["visitor_ip_context"]["ip"] == "127.0.0.1"
+        assert data["items"][0]["visitor_ip_context"]["scope"] == "loopback"
+        assert "server_ip_context" not in data
     finally:
         db.close()
 

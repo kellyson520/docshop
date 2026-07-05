@@ -1,0 +1,75 @@
+services:
+  docshop:
+    image: ${DOCSHOP_IMAGE:-docshop:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+        NODE_IMAGE: ${NODE_IMAGE:-node:18.20.8-alpine3.20}
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.11.11-slim-bookworm}
+        APT_MIRROR: ${APT_MIRROR:-http://mirrors.tuna.tsinghua.edu.cn/debian}
+        APT_SECURITY_MIRROR: ${APT_SECURITY_MIRROR:-http://mirrors.tuna.tsinghua.edu.cn/debian-security}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST-pypi.tuna.tsinghua.edu.cn}
+    ports:
+      - "${DOCSHOP_PORT:-8080}:80"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+      SECRET_KEY: ${SECRET_KEY:-auto}
+      STORAGE_ROOT: /app/data
+      DATABASE_URL: sqlite:////app/data/docshop.db
+      UPLOAD_DIR: /app/data/uploads
+      LOG_DIR: /app/data/logs
+      TEMP_DIR: /app/data/temp
+      MOBILE_MODEL_CACHE_DIR: /app/data/cache
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-104857600}
+      ALLOWED_FILE_TYPES: ${ALLOWED_FILE_TYPES:-.pdf,.docx,.doc,.xlsx,.xls}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-100}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-60}
+      RATE_LIMIT_MAX_KEYS: ${RATE_LIMIT_MAX_KEYS:-10000}
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-127.0.0.1,::1}
+      DOCX2PDF_TIMEOUT_SECONDS: ${DOCX2PDF_TIMEOUT_SECONDS:-300}
+      PREVIEW_PDF_TIMEOUT_SECONDS: ${PREVIEW_PDF_TIMEOUT_SECONDS:-300}
+      PREVIEW_IMAGE_MAX_WORKERS: ${PREVIEW_IMAGE_MAX_WORKERS:-1}
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-1}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    cap_add:
+      - NET_BIND_SERVICE
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: ${DOCKER_MEMORY_LIMIT:-2G}
+          cpus: "${DOCKER_CPU_LIMIT:-2.0}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - docshop-net
+
+networks:
+  docshop-net:
+    driver: bridge

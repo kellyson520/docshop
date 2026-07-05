@@ -303,6 +303,9 @@ class TestTrackingAPI:
         data = response.json()
         assert data["code"] == 0
         assert all(item["device_type"] == "mobile" for item in data["data"]["items"])
+        assert data["data"]["items"][0]["visitor_ip_context"]["ip"] == "10.0.0.1"
+        assert data["data"]["items"][0]["visitor_ip_context"]["scope"] == "private"
+        assert "server_ip_context" not in data["data"]
 
     def test_get_access_log_detail(self, client, auth_headers, access_log):
         """测试获取访问日志详情"""
@@ -313,27 +316,16 @@ class TestTrackingAPI:
         assert data["data"]["id"] == access_log.id
         assert data["data"]["ip_address"] == access_log.ip_address
 
-    def test_get_access_log_detail_includes_server_ip_context(self, client, auth_headers, access_log, monkeypatch):
-        from app.routers import tracking_admin
-
-        monkeypatch.setattr(
-            tracking_admin,
-            "fetch_server_ip_context",
-            lambda: {
-                "source": "ippure_server_egress",
-                "ip": "112.224.158.50",
-                "asn": 4837,
-                "asOrganization": "China Unicom Shandong province network",
-            },
-        )
-
+    def test_get_access_log_detail_includes_visitor_ip_context(self, client, auth_headers, access_log):
         response = client.get(f"/api/v1/admin/tracking/logs/{access_log.id}", headers=auth_headers)
 
         assert response.status_code == 200
         data = response.json()["data"]
         assert data["id"] == access_log.id
-        assert data["server_ip_context"]["ip"] == "112.224.158.50"
-        assert data["server_ip_context"]["asn"] == 4837
+        assert data["visitor_ip_context"]["ip"] == "192.168.1.1"
+        assert data["visitor_ip_context"]["scope"] == "private"
+        assert data["visitor_ip_context"]["scopeLabel"] == "局域网"
+        assert "server_ip_context" not in data
 
     def test_get_access_log_detail_not_found(self, client, auth_headers):
         """测试获取不存在的日志详情"""

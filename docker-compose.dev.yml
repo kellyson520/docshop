@@ -1,0 +1,105 @@
+services:
+  backend:
+    image: ${DOCSHOP_DEV_BACKEND_IMAGE:-docshop-backend-dev:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend-dev
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+        NODE_IMAGE: ${NODE_IMAGE:-node:18.20.8-alpine3.20}
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.11.11-slim-bookworm}
+        APT_MIRROR: ${APT_MIRROR:-http://mirrors.tuna.tsinghua.edu.cn/debian}
+        APT_SECURITY_MIRROR: ${APT_SECURITY_MIRROR:-http://mirrors.tuna.tsinghua.edu.cn/debian-security}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.tuna.tsinghua.edu.cn}
+    ports:
+      - "${BACKEND_DEV_PORT:-8000}:8000"
+    working_dir: /app/backend
+    volumes:
+      - ./:/app
+    environment:
+      ENVIRONMENT: development
+      DEBUG: "true"
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-me}
+      STORAGE_ROOT: /app/data
+      DATABASE_URL: sqlite:////app/data/docshop.db
+      UPLOAD_DIR: /app/data/uploads
+      LOG_DIR: /app/data/logs
+      TEMP_DIR: /app/data/temp
+      MOBILE_MODEL_CACHE_DIR: /app/data/cache
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-104857600}
+      ALLOWED_FILE_TYPES: ${ALLOWED_FILE_TYPES:-.pdf,.docx,.doc,.xlsx,.xls}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      LOG_FORMAT: ${LOG_FORMAT:-text}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-false}
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-127.0.0.1,::1}
+      DOCX2PDF_TIMEOUT_SECONDS: ${DOCX2PDF_TIMEOUT_SECONDS:-300}
+      PREVIEW_PDF_TIMEOUT_SECONDS: ${PREVIEW_PDF_TIMEOUT_SECONDS:-300}
+      PREVIEW_IMAGE_MAX_WORKERS: ${PREVIEW_IMAGE_MAX_WORKERS:-1}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin@123.}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 45s
+      retries: 5
+    networks:
+      - docshop-dev-net
+    command:
+      - sh
+      - -lc
+      - >
+        mkdir -p /app/data/uploads /app/data/logs /app/data/temp /app/data/cache
+        /app/data/covers /app/data/avatars /app/data/documents /app/data/objects /app/data/trash
+        && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+        --reload-dir /app/backend/app
+        --reload-dir /app/backend/scripts
+
+  frontend:
+    image: ${DOCSHOP_DEV_FRONTEND_IMAGE:-docshop-frontend-dev:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend-dev
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:18.20.8-alpine3.20}
+    ports:
+      - "${FRONTEND_DEV_PORT:-5173}:5173"
+    working_dir: /app/frontend
+    volumes:
+      - ./:/app
+      - frontend-node-modules:/app/frontend/node_modules
+    environment:
+      NODE_ENV: development
+      # Vite inside Docker needs polling on Windows bind mounts.
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+      VITE_DEV_PROXY_TARGET: ${VITE_DEV_PROXY_TARGET:-http://backend:8000}
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - docshop-dev-net
+    command:
+      - sh
+      - -lc
+      - >
+        mkdir -p /app/frontend/node_modules
+        && if [ ! -x /app/frontend/node_modules/.bin/vite ]; then
+        cp -a /frontend/node_modules/. /app/frontend/node_modules/;
+        fi
+        && npm run dev -- --host 0.0.0.0 --port 5173
+
+volumes:
+  frontend-node-modules:
+
+networks:
+  docshop-dev-net:
+    driver: bridge

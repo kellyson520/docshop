@@ -63,20 +63,6 @@ vi.mock('@/api/client', () => ({
     if (url === '/admin/tracking/logs') {
       return Promise.resolve({
         total: 2,
-        server_ip_context: {
-          source: 'ippure_server_egress',
-          ip: '112.224.158.50',
-          city: 'Qingdao',
-          region: 'Shandong',
-          countryCode: 'CN',
-          fraudScore: 0,
-          isResidential: true,
-          isBroadcast: false,
-          asn: 4837,
-          asOrganization: 'China Unicom Shandong province network',
-          timezone: 'Asia/Shanghai',
-          postalCode: '266000',
-        },
         items: [{
           id: 'log-1',
           timestamp: '2026-06-16T12:00:00.789123Z',
@@ -98,6 +84,21 @@ vi.mock('@/api/client', () => ({
           request_path: '/demo',
           response_status: 200,
           response_time_ms: 10,
+          visitor_ip_context: {
+            source: 'access_log_visitor_ip',
+            ip: '127.0.0.1',
+            version: 'IPv4',
+            scope: 'loopback',
+            scopeLabel: '本机回环',
+            country: null,
+            countryCode: null,
+            city: null,
+            asn: null,
+            asOrganization: null,
+            isPrivate: false,
+            isLoopback: true,
+            isGlobal: false,
+          },
         }, {
           id: 'log-2',
           timestamp: '2026-06-17T08:30:00.000000Z',
@@ -118,6 +119,21 @@ vi.mock('@/api/client', () => ({
           request_path: '/demo/mobile',
           response_status: 200,
           response_time_ms: 25,
+          visitor_ip_context: {
+            source: 'access_log_visitor_ip',
+            ip: '10.0.0.2',
+            version: 'IPv4',
+            scope: 'private',
+            scopeLabel: '局域网',
+            country: null,
+            countryCode: null,
+            city: null,
+            asn: null,
+            asOrganization: null,
+            isPrivate: true,
+            isLoopback: false,
+            isGlobal: false,
+          },
         }],
       })
     }
@@ -318,9 +334,8 @@ describe('TrackingDashboard', () => {
     expect(card.text()).toContain('Windows 11 · Edge 149')
     expect(card.text()).toContain('📍 39.9042, 116.4074 (±9m)')
     expect(card.text()).toContain('Asia/Shanghai · zh-CN')
-    expect(card.text()).toContain('服务器出口IP · Qingdao, Shandong, CN')
-    expect(card.text()).toContain('风险 0 · 住宅IP · 非广播')
-    expect(card.text()).toContain('AS4837 · China Unicom Shandong province network')
+    expect(card.text()).toContain('IPv4 · 本机回环')
+    expect(card.text()).not.toContain('服务器出口IP')
     expect(wrapper.text()).toContain('visitor-…')
     expect(wrapper.find('.access-info-dialog').exists()).toBe(false)
 
@@ -348,10 +363,10 @@ describe('TrackingDashboard', () => {
     expect(dialog.text()).toContain('Asia/Shanghai · zh-CN')
     expect(dialog.text()).toContain('访客 ID')
     expect(dialog.text()).toContain('visitor-abcdef-123456')
-    expect(dialog.text()).toContain('服务器出口 IP 情报')
-    expect(dialog.text()).toContain('112.224.158.50')
-    expect(dialog.text()).toContain('266000')
-    expect(dialog.text()).toContain('China Unicom Shandong province network')
+    expect(dialog.text()).toContain('访客 IP 情报')
+    expect(dialog.text()).toContain('127.0.0.1')
+    expect(dialog.text()).toContain('本机回环')
+    expect(dialog.text()).not.toContain('China Unicom Shandong province network')
 
     expect(wrapper.text()).not.toContain('2026-06-16T12:00:00.789123Z')
     expect(wrapper.text()).not.toContain('.789123')

@@ -11,6 +11,7 @@ import hashlib
 import asyncio
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional, Dict, Any
 from urllib.parse import parse_qsl, urlencode, urlparse
 
@@ -23,7 +24,10 @@ from sqlalchemy.orm import Session
 from app.models.tracking_config import TrackingConfig
 from app.models.access_log import AccessLog
 from app.models.user_session import UserSession
+from app.services.mobile_model_resolver import resolve_mobile_model_from_user_agent
+from app.services.mobile_model_sync import is_cache_stale, refresh_mobile_model_cache
 from app.utils.logger import get_logger
+from app.utils.request_scheme import is_https_request
 
 logger = get_logger("tracking")
 
@@ -89,6 +93,7 @@ def sanitize_query_for_tracking(query: str) -> str:
 
 
 _pending_tasks: set = set()
+_mobile_model_refresh_task: asyncio.Task | None = None
 
 
 def _log_background_task_exception(task: asyncio.Task) -> None:
@@ -108,6 +113,11 @@ def create_logged_task(coro, *, name: str) -> asyncio.Task:
     _pending_tasks.add(task)
     task.add_done_callback(_log_background_task_exception)
     return task
+
+
+async def refresh_mobile_model_cache_async(settings_obj) -> dict:
+    """Run the blocking MobileModels refresh in a worker thread."""
+    return await asyncio.to_thread(refresh_mobile_model_cache, settings_obj)
 
 
 class TrackingMiddleware(BaseHTTPMiddleware):
@@ -171,6 +181,11 @@ class TrackingMiddleware(BaseHTTPMiddleware):
         if not config or not config.enable_tracking:
             return await call_next(request)
 
+        if self._should_skip_tracking(request):
+            return await call_next(request)
+
+        self._maybe_schedule_mobile_model_cache_refresh()
+
         # 生成或获取设备ID（持久化 UUID）
         device_id = request.cookies.get("device_id")
         if not device_id:
@@ -197,6 +212,7 @@ class TrackingMiddleware(BaseHTTPMiddleware):
         try:
             # 处理请求
             response = await call_next(request)
+            secure_cookie = is_https_request(request)
 
             # 计算响应时间
             response_time = int((time.time() - start_time) * 1000)
@@ -204,6 +220,8 @@ class TrackingMiddleware(BaseHTTPMiddleware):
             if self._should_rotate_session_after_response(request, response):
                 request.state.session_id = str(uuid.uuid4())
                 request.state.new_session = True
+
+            request.state.is_page_view = self._is_page_view(request)
 
             # 异步记录访问日志（不阻塞响应）
             # 创建新任务但不等待完成
@@ -217,7 +235,7 @@ class TrackingMiddleware(BaseHTTPMiddleware):
                 response.set_cookie(
                     key="device_id", value=device_id,
                     max_age=86400 * 365, httponly=True,
-                    samesite="lax", secure=settings.is_production(),
+                    samesite="lax", secure=secure_cookie,
                 )
 
             # 设置会话Cookie
@@ -225,7 +243,7 @@ class TrackingMiddleware(BaseHTTPMiddleware):
                 response.set_cookie(
                     key="session_id", value=request.state.session_id,
                     max_age=86400 * 30, httponly=True,
-                    samesite="lax", secure=settings.is_production(),
+                    samesite="lax", secure=secure_cookie,
                 )
 
             return response
@@ -289,6 +307,25 @@ class TrackingMiddleware(BaseHTTPMiddleware):
             and str(request.url.path) in _AUTH_SESSION_ROTATION_PATHS
             and 200 <= getattr(response, "status_code", 500) < 400
         )
+
+    def _should_skip_tracking(self, request: Request) -> bool:
+        path = str(request.url.path)
+        return path.endswith("/tracking/ping")
+
+    def _is_page_view(self, request: Request) -> bool:
+        path = str(request.url.path)
+        static_exts = (
+            ".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".webp",
+            ".woff", ".woff2", ".ttf", ".ico", ".json", ".map", ".txt",
+        )
+        if any(path.lower().endswith(ext) for ext in static_exts):
+            return False
+        if path.startswith("/assets/") or path.startswith("/api/"):
+            return False
+        if path in ("/favicon.ico", "/robots.txt"):
+            return False
+        accept = (request.headers.get("accept") or "").lower()
+        return "text/html" in accept
 
     def _parse_client_hints(self, headers: Dict[str, Any]) -> Dict[str, Any]:
         sec_ch_ua = str(headers.get("sec-ch-ua", ""))
@@ -391,6 +428,44 @@ class TrackingMiddleware(BaseHTTPMiddleware):
                 merged[key] = value
         return merged
 
+    def _maybe_schedule_mobile_model_cache_refresh(self) -> None:
+        """Schedule one non-blocking MobileModels refresh when cache is stale."""
+        global _mobile_model_refresh_task
+
+        if not getattr(settings, "MOBILE_MODEL_SYNC_ENABLED", True):
+            return
+
+        if _mobile_model_refresh_task is not None and not _mobile_model_refresh_task.done():
+            return
+
+        meta_path = Path(settings.MOBILE_MODEL_CACHE_DIR) / "mobile_models.meta.json"
+        try:
+            stale = is_cache_stale(
+                meta_path,
+                interval_hours=int(getattr(settings, "MOBILE_MODEL_SYNC_INTERVAL_HOURS", 168)),
+            )
+        except Exception as exc:
+            logger.debug(f"检查手机型号映射缓存状态失败，跳过本次刷新: {exc}")
+            return
+
+        if not stale:
+            return
+
+        task = create_logged_task(
+            refresh_mobile_model_cache_async(settings),
+            name="mobile-model-cache-refresh",
+        )
+        _mobile_model_refresh_task = task
+
+        if hasattr(task, "add_done_callback"):
+            task.add_done_callback(self._clear_mobile_model_refresh_task)
+
+    @staticmethod
+    def _clear_mobile_model_refresh_task(task) -> None:
+        global _mobile_model_refresh_task
+        if _mobile_model_refresh_task is task:
+            _mobile_model_refresh_task = None
+
     async def _log_access(
         self,
         request: Request,
@@ -422,6 +497,17 @@ class TrackingMiddleware(BaseHTTPMiddleware):
             client_hints = self._parse_client_hints(dict(request.headers))
             ua_info = self._parse_user_agent(user_agent_str) if user_agent_str else {}
             device_info = self._merge_device_signals(client_hints, ua_info)
+            if user_agent_str:
+                try:
+                    mobile_model_cache = Path(settings.MOBILE_MODEL_CACHE_DIR) / "mobile_models.json"
+                    resolved_model = resolve_mobile_model_from_user_agent(
+                        user_agent_str,
+                        cache_path=mobile_model_cache,
+                    )
+                    if resolved_model:
+                        device_info.update(resolved_model)
+                except Exception as exc:
+                    logger.debug(f"手机型号映射解析失败，已跳过: {exc}")
             referer_info = self._parse_referer(
                 request.headers.get("referer"),
                 request_host=request.url.hostname or "",
@@ -458,6 +544,8 @@ class TrackingMiddleware(BaseHTTPMiddleware):
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 user_id=user_id,
                 is_authenticated=1 if user_id else 0,
+                visitor_id=device_id,
+                is_page_view=1 if self._is_page_view(request) else 0,
                 ip_address=ip,
                 ip_country=location_info.get("country"),
                 ip_city=location_info.get("city"),
@@ -467,6 +555,10 @@ class TrackingMiddleware(BaseHTTPMiddleware):
                 device_type=device_info.get("device_type"),
                 device_brand=device_info.get("device_brand"),
                 device_model=device_info.get("device_model"),
+                device_model_code=device_info.get("device_model_code"),
+                device_model_name=device_info.get("device_model_name"),
+                device_brand_name=device_info.get("device_brand_name"),
+                device_display_name=device_info.get("device_display_name"),
                 os_name=device_info.get("os_name"),
                 os_version=device_info.get("os_version"),
                 browser_name=device_info.get("browser_name"),
@@ -838,7 +930,10 @@ class TrackingMiddleware(BaseHTTPMiddleware):
             if session:
                 # 更新现有会话
                 session.update_last_seen(ip)
-                session.increment_page_view()
+                if getattr(request.state, "is_page_view", True):
+                    session.increment_page_view()
+                if getattr(request.state, "device_id", None) and not getattr(session, "visitor_id", None):
+                    session.visitor_id = request.state.device_id
                 if user_id and not session.user_id:
                     session.user_id = user_id
             else:
@@ -847,10 +942,13 @@ class TrackingMiddleware(BaseHTTPMiddleware):
                 session = UserSession.create_session(
                     session_id=request.state.session_id,
                     user_id=user_id,
+                    visitor_id=getattr(request.state, "device_id", None),
                     ip=ip,
                     user_agent=user_agent,
                     device_info=device_info,
                 )
+                if getattr(request.state, "is_page_view", False):
+                    session.increment_page_view()
                 db.add(session)
 
             db.commit()

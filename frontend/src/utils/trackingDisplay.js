@@ -181,71 +181,50 @@ export function formatClientEnvironment(row = {}) {
   return joinParts([normalizeText(row.client_timezone), normalizeText(row.client_language)], ' · ') || UNKNOWN_LABEL
 }
 
-export function formatServerIpGeoSummary(serverIpContext = null) {
-  if (!serverIpContext || typeof serverIpContext !== 'object') return ''
+export function formatVisitorIpGeoSummary(visitorIpContext = null) {
+  if (!visitorIpContext || typeof visitorIpContext !== 'object') return ''
 
   const parts = [
-    normalizeLooseText(serverIpContext.city),
-    normalizeLooseText(serverIpContext.region),
-    normalizeLooseText(serverIpContext.countryCode || serverIpContext.country),
+    normalizeLooseText(visitorIpContext.city),
+    normalizeLooseText(visitorIpContext.countryCode || visitorIpContext.country),
   ].filter(Boolean)
 
-  return parts.length ? `服务器出口IP · ${parts.join(', ')}` : ''
+  return parts.length ? `访客IP · ${parts.join(', ')}` : ''
 }
 
-export function formatServerIpRiskSummary(serverIpContext = null) {
-  if (!serverIpContext || typeof serverIpContext !== 'object') return ''
+export function formatVisitorIpTypeSummary(visitorIpContext = null) {
+  if (!visitorIpContext || typeof visitorIpContext !== 'object') return ''
 
-  const parts = []
-  const fraudScore = toFiniteNumber(serverIpContext.fraudScore)
-  if (fraudScore !== null) parts.push(`风险 ${fraudScore}`)
-
-  if (serverIpContext.isResidential === true) parts.push('住宅IP')
-  else if (serverIpContext.isResidential === false) parts.push('非住宅IP')
-
-  if (serverIpContext.isBroadcast === true) parts.push('广播')
-  else if (serverIpContext.isBroadcast === false) parts.push('非广播')
-
-  return parts.join(' · ')
+  return [
+    normalizeLooseText(visitorIpContext.version),
+    normalizeLooseText(visitorIpContext.scopeLabel),
+  ].filter(Boolean).join(' · ')
 }
 
-export function formatServerIpNetworkSummary(serverIpContext = null) {
-  if (!serverIpContext || typeof serverIpContext !== 'object') return ''
+export function formatVisitorIpNetworkSummary(visitorIpContext = null) {
+  if (!visitorIpContext || typeof visitorIpContext !== 'object') return ''
 
-  const asn = normalizeLooseText(serverIpContext.asn)
-  const organization = normalizeLooseText(serverIpContext.asOrganization)
+  const asn = normalizeLooseText(visitorIpContext.asn)
+  const organization = normalizeLooseText(visitorIpContext.asOrganization)
 
   if (asn && organization) return `AS${asn} · ${organization}`
   if (asn) return `AS${asn}`
   return organization
 }
 
-export function buildServerIpContextDetails(serverIpContext = null) {
-  if (!serverIpContext || typeof serverIpContext !== 'object') return []
+export function buildVisitorIpContextDetails(visitorIpContext = null) {
+  if (!visitorIpContext || typeof visitorIpContext !== 'object') return []
 
-  const countryText = [serverIpContext.country, serverIpContext.countryCode]
-    .map(normalizeLooseText)
-    .filter(Boolean)
-    .join(' / ')
-
-  const boolLabel = (value) => {
-    if (value === true) return '是'
-    if (value === false) return '否'
-    return '-'
-  }
+  const countryText = normalizeLooseText(visitorIpContext.countryCode || visitorIpContext.country)
 
   return [
-    { label: '出口 IP', value: toDetailValue(serverIpContext.ip) },
+    { label: '访客 IP', value: toDetailValue(visitorIpContext.ip) },
+    { label: 'IP 版本', value: toDetailValue(visitorIpContext.version) },
+    { label: '地址类型', value: toDetailValue(visitorIpContext.scopeLabel) },
     { label: '国家/地区', value: toDetailValue(countryText) },
-    { label: '省/州', value: toDetailValue(serverIpContext.region) },
-    { label: '城市', value: toDetailValue(serverIpContext.city) },
-    { label: '邮编', value: toDetailValue(serverIpContext.postalCode) },
-    { label: '时区', value: toDetailValue(serverIpContext.timezone) },
-    { label: 'ASN', value: toDetailValue(serverIpContext.asn) },
-    { label: 'AS 组织', value: toDetailValue(serverIpContext.asOrganization) },
-    { label: '风险分', value: toDetailValue(serverIpContext.fraudScore) },
-    { label: '住宅 IP', value: boolLabel(serverIpContext.isResidential) },
-    { label: '广播 IP', value: boolLabel(serverIpContext.isBroadcast) },
+    { label: '城市', value: toDetailValue(visitorIpContext.city) },
+    { label: 'ASN', value: toDetailValue(visitorIpContext.asn) },
+    { label: '运营商/组织', value: toDetailValue(visitorIpContext.asOrganization) },
   ]
 }
 
@@ -284,7 +263,7 @@ export function formatTrackingBusiness(row = {}) {
   return parts.join(' / ') || '普通访问'
 }
 
-export function buildTrackingInfoCard(row = {}, serverIpContext = null) {
+export function buildTrackingInfoCard(row = {}, visitorIpContext = null) {
   const toInfoCardFallback = (value) => (value === UNKNOWN_LABEL ? '-' : withDash(value))
   const title = toInfoCardFallback(formatDevicePrimary(row))
   const deviceTypeText = toInfoCardFallback(getDeviceTypeText(normalizeDeviceType(row.device_type) || row.device_type))
@@ -298,11 +277,18 @@ export function buildTrackingInfoCard(row = {}, serverIpContext = null) {
     secondary,
     location,
     environment,
-    serverIpSummary: formatServerIpGeoSummary(serverIpContext),
-    serverIpRisk: formatServerIpRiskSummary(serverIpContext),
-    serverIpNetwork: formatServerIpNetworkSummary(serverIpContext),
+    visitorIpSummary: formatVisitorIpGeoSummary(visitorIpContext),
+    visitorIpType: formatVisitorIpTypeSummary(visitorIpContext),
+    visitorIpNetwork: formatVisitorIpNetworkSummary(visitorIpContext),
   }
 }
+
+export const formatServerIpGeoSummary = formatVisitorIpGeoSummary
+export function formatServerIpRiskSummary() {
+  return ''
+}
+export const formatServerIpNetworkSummary = formatVisitorIpNetworkSummary
+export const buildServerIpContextDetails = buildVisitorIpContextDetails
 
 export function buildTrackingTechnicalDetails(row = {}) {
   return [

@@ -95,3 +95,52 @@ def test_fetch_server_ip_context_returns_stale_cache_when_remote_fetch_fails(mon
     payload = ippure_service.fetch_server_ip_context(force_refresh=True)
 
     assert payload == stale_payload
+
+
+def test_build_visitor_ip_context_uses_log_ip_and_location_fields():
+    payload = ippure_service.build_visitor_ip_context(
+        "112.224.158.50",
+        {
+            "country": "CN",
+            "city": "Qingdao",
+            "asn": "4837",
+            "isp": "China Unicom Shandong province network",
+        },
+    )
+
+    assert payload == {
+        "source": "access_log_visitor_ip",
+        "ip": "112.224.158.50",
+        "version": "IPv4",
+        "scope": "public",
+        "scopeLabel": "公网",
+        "country": "CN",
+        "countryCode": "CN",
+        "region": None,
+        "city": "Qingdao",
+        "timezone": None,
+        "asn": "4837",
+        "asOrganization": "China Unicom Shandong province network",
+        "isPrivate": False,
+        "isLoopback": False,
+        "isGlobal": True,
+    }
+
+
+def test_build_visitor_ip_context_classifies_private_and_loopback_addresses():
+    private_payload = ippure_service.build_visitor_ip_context("10.0.0.8")
+    loopback_payload = ippure_service.build_visitor_ip_context("127.0.0.1")
+
+    assert private_payload["scope"] == "private"
+    assert private_payload["scopeLabel"] == "局域网"
+    assert private_payload["version"] == "IPv4"
+    assert private_payload["isPrivate"] is True
+    assert private_payload["isLoopback"] is False
+    assert private_payload["isGlobal"] is False
+
+    assert loopback_payload["scope"] == "loopback"
+    assert loopback_payload["scopeLabel"] == "本机回环"
+    assert loopback_payload["version"] == "IPv4"
+    assert loopback_payload["isPrivate"] is False
+    assert loopback_payload["isLoopback"] is True
+    assert loopback_payload["isGlobal"] is False

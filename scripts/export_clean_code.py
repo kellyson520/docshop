@@ -7,6 +7,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 import os
 import shutil
+import stat
 import sys
 
 
@@ -19,9 +20,13 @@ EXCLUDED_DIR_NAMES = {
     ".git",
     ".codegraph",
     ".pytest_cache",
+    ".reasonix",
     "__tests__",
-    "node_modules",
+    "artifacts",
+    "data",
+    "load_tests",
     "logs",
+    "node_modules",
     "playwright-report",
     "test-results",
 }
@@ -37,6 +42,7 @@ EXCLUDED_DIR_PATHS = {
 }
 
 EXCLUDED_FILE_NAMES = {
+    ".env",
     "pytest.ini",
     ".coverage",
     "vitest.config.js",
@@ -46,21 +52,29 @@ EXCLUDED_FILE_NAMES = {
 }
 
 EXCLUDED_FILE_PATTERNS = [
+    "*debug*.db",
+    "*probe*.db",
+    "*test*.db",
     "*.spec.*",
     "*.test.*",
     "*.log",
     "*.pid",
     "*.zip",
-    "*_test*.db",
     "_tmp*.db",
+    "tmp_*.py",
 ]
 
 EXCLUDED_FILE_PATHS = {
     "backend/.coverage",
     "backend/pytest.ini",
-    "probe_counter.db",
-    "debug_preconvert.db",
-    "test.db",
+    "backend/.env",
+    "backend/probe_counter.db",
+    "backend/debug_preconvert.db",
+    "backend/test.db",
+    "backend/test_api_performance.db",
+    "backend/test_memory_performance.db",
+    "backend/_tmp_test_inspect.db",
+    "backend/tmp_word_test.py",
 }
 
 
@@ -92,12 +106,20 @@ def should_exclude_file(relative_file: str) -> bool:
         return True
     if relative_file in EXCLUDED_FILE_PATHS:
         return True
+    if path.suffix == ".py" and path.name == "tmp_word_test.py":
+        return True
     return any(fnmatch(path.name, pattern) for pattern in EXCLUDED_FILE_PATTERNS)
 
 
 def reset_output_dir(output_dir: Path) -> None:
+    def _handle_remove_readonly(func, path, exc_info):
+        if not os.path.exists(path):
+            return
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+
     if output_dir.exists():
-        shutil.rmtree(output_dir)
+        shutil.rmtree(output_dir, onexc=_handle_remove_readonly)
     output_dir.mkdir(parents=True, exist_ok=True)
 
 

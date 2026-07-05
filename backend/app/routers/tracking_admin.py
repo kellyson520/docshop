@@ -17,11 +17,26 @@ from app.models.user import User
 from app.models.tracking_config import TrackingConfig
 from app.models.access_log import AccessLog
 from app.models.user_session import UserSession
-from app.services.ippure_service import fetch_server_ip_context
+from app.services.ippure_service import build_visitor_ip_context
 from app.schemas.response import ApiResponse, success_response
 from app.utils.logger import log_audit
 
 router = APIRouter(prefix="/admin/tracking", tags=["tracking-admin"])
+
+
+def _build_log_payload(log: AccessLog, include_raw: bool = False) -> dict:
+    payload = log.to_dict(include_raw=include_raw)
+    payload["visitor_ip_context"] = build_visitor_ip_context(
+        log.ip_address,
+        {
+            "country": log.ip_country,
+            "countryCode": log.ip_country,
+            "city": log.ip_city,
+            "asn": log.ip_asn,
+            "isp": log.ip_isp,
+        },
+    )
+    return payload
 
 
 def _stats_window(days: int, timezone_offset_minutes: int = 0):
@@ -378,14 +393,12 @@ def get_access_logs(
     logs = query.order_by(AccessLog.timestamp.desc()).offset(
         (page - 1) * page_size
     ).limit(page_size).all()
-    server_ip_context = fetch_server_ip_context()
 
     return success_response({
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": [log.to_dict() for log in logs],
-        "server_ip_context": server_ip_context,
+        "items": [_build_log_payload(log) for log in logs],
     })
 
 
@@ -409,8 +422,7 @@ def get_access_log_detail(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="日志不存在")
 
-    payload = log.to_dict(include_raw=True)
-    payload["server_ip_context"] = fetch_server_ip_context()
+    payload = _build_log_payload(log, include_raw=True)
     return success_response(payload)
 
 

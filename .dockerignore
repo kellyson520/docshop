@@ -1,0 +1,57 @@
+# Docker build context hygiene
+.git/
+.gitignore
+.dockerignore
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+backend/.env
+
+# Python cache / tests / local data
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+backend/.pytest_cache/
+backend/tests/
+backend/logs/
+backend/data/
+backend/test.db
+pytest.ini
+
+# Node / frontend local artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.github/
+frontend/e2e/
+frontend/test-results/
+frontend/playwright-report/
+frontend/*.log
+frontend/*.png
+frontend/.dev-*.pid
+frontend/npm-test*.log
+
+# Project local artifacts
+.codegraph/
+.reasonix/
+artifacts/
+data/
+logs/
+test/
+*.db
+*.sqlite
+*.sqlite3
+*.docx
+*.pdf
+*.xlsx
+*.xls
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -206,6 +206,18 @@ def _ensure_schema_updates() -> None:
     try:
         with engine.begin() as conn:
             inspector = inspect(conn)
+            if not inspector.has_table("share_tab_grants"):
+                from app.models.share_tab_grant import ShareTabGrant
+
+                ShareTabGrant.__table__.create(bind=conn)
+                db_logger.info("Created share_tab_grants table")
+            if not inspector.has_table("resource_access_grants"):
+                from app.models.resource_access_grant import ResourceAccessGrant
+
+                ResourceAccessGrant.__table__.create(bind=conn)
+                db_logger.info("Created resource_access_grants table")
+            # project_folders is created through SQLAlchemy metadata; older
+            # databases only need the additive document_files.folder_id column.
             if inspector.has_table("users"):
                 columns = {column["name"] for column in inspector.get_columns("users")}
                 if "email" not in columns:
@@ -222,6 +234,73 @@ def _ensure_schema_updates() -> None:
                 for statement in _access_log_additive_statements(columns):
                     db_logger.info(f"Applying access_logs additive schema statement: {statement}")
                     conn.execute(text(statement))
+            if inspector.has_table("user_sessions"):
+                columns = {column["name"] for column in inspector.get_columns("user_sessions")}
+                for statement in _user_session_additive_statements(columns):
+                    db_logger.info(f"Applying user_sessions additive schema statement: {statement}")
+                    conn.execute(text(statement))
+            if inspector.has_table("exam_schedules"):
+                columns = {column["name"] for column in inspector.get_columns("exam_schedules")}
+                if "reminder_offsets_minutes" not in columns:
+                    conn.execute(text("ALTER TABLE exam_schedules ADD COLUMN reminder_offsets_minutes TEXT"))
+                    db_logger.info("Added exam_schedules.reminder_offsets_minutes column")
+            if inspector.has_table("document_files"):
+                columns = {column["name"] for column in inspector.get_columns("document_files")}
+                if "folder_id" not in columns:
+                    conn.execute(text("ALTER TABLE document_files ADD COLUMN folder_id VARCHAR(36)"))
+                    db_logger.info("Added document_files.folder_id column")
+                additive_columns = {
+                    "file_category": "ALTER TABLE document_files ADD COLUMN file_category VARCHAR(20) NOT NULL DEFAULT 'binary'",
+                    "mime_type": "ALTER TABLE document_files ADD COLUMN mime_type VARCHAR(255)",
+                    "preview_status": "ALTER TABLE document_files ADD COLUMN preview_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
+                    "preview_error": "ALTER TABLE document_files ADD COLUMN preview_error TEXT",
+                    "analysis_status": "ALTER TABLE document_files ADD COLUMN analysis_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
+                    "analysis_error": "ALTER TABLE document_files ADD COLUMN analysis_error TEXT",
+                }
+                for column_name, statement in additive_columns.items():
+                    if column_name not in columns:
+                        conn.execute(text(statement))
+                        db_logger.info(f"Added document_files.{column_name} column")
+            if inspector.has_table("file_versions"):
+                columns = {column["name"] for column in inspector.get_columns("file_versions")}
+                additive_columns = {
+                    "preview_status": "ALTER TABLE file_versions ADD COLUMN preview_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
+                    "preview_error": "ALTER TABLE file_versions ADD COLUMN preview_error TEXT",
+                    "analysis_status": "ALTER TABLE file_versions ADD COLUMN analysis_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
+                    "analysis_error": "ALTER TABLE file_versions ADD COLUMN analysis_error TEXT",
+                    "preview_refresh_token": "ALTER TABLE file_versions ADD COLUMN preview_refresh_token VARCHAR(36)",
+                    "derived_asset_version": "ALTER TABLE file_versions ADD COLUMN derived_asset_version INTEGER NOT NULL DEFAULT 1",
+                }
+                for column_name, statement in additive_columns.items():
+                    if column_name not in columns:
+                        conn.execute(text(statement))
+                        db_logger.info(f"Added file_versions.{column_name} column")
+            if inspector.has_table("announcements"):
+                columns = {column["name"] for column in inspector.get_columns("announcements")}
+                if "summary" not in columns:
+                    conn.execute(text("ALTER TABLE announcements ADD COLUMN summary VARCHAR(255)"))
+                    db_logger.info("Added announcements.summary column")
+                if "content_blocks_json" not in columns:
+                    conn.execute(text("ALTER TABLE announcements ADD COLUMN content_blocks_json TEXT NOT NULL DEFAULT '[]'"))
+                    db_logger.info("Added announcements.content_blocks_json column")
+                if "popup_config_json" not in columns:
+                    conn.execute(text("ALTER TABLE announcements ADD COLUMN popup_config_json TEXT NOT NULL DEFAULT '{}'"))
+                    db_logger.info("Added announcements.popup_config_json column")
+            if inspector.has_table("share_tokens"):
+                columns = {column["name"] for column in inspector.get_columns("share_tokens")}
+                additive_columns = {
+                    "require_login": "ALTER TABLE share_tokens ADD COLUMN require_login INTEGER NOT NULL DEFAULT 0",
+                    "password_hash": "ALTER TABLE share_tokens ADD COLUMN password_hash VARCHAR(255)",
+                    "password_hint": "ALTER TABLE share_tokens ADD COLUMN password_hint VARCHAR(120)",
+                    "allow_preview": "ALTER TABLE share_tokens ADD COLUMN allow_preview INTEGER NOT NULL DEFAULT 1",
+                    "allow_diff": "ALTER TABLE share_tokens ADD COLUMN allow_diff INTEGER NOT NULL DEFAULT 1",
+                    "allow_versions": "ALTER TABLE share_tokens ADD COLUMN allow_versions INTEGER NOT NULL DEFAULT 1",
+                    "policy_mode": "ALTER TABLE share_tokens ADD COLUMN policy_mode VARCHAR(40) NOT NULL DEFAULT 'override_with_token_policy'",
+                }
+                for column_name, statement in additive_columns.items():
+                    if column_name not in columns:
+                        conn.execute(text(statement))
+                        db_logger.info(f"Added share_tokens.{column_name} column")
     except sqlalchemy_exc.NoInspectionAvailable:
         db_logger.warning("Skipped schema update because the database engine cannot be inspected")
 
@@ -234,6 +313,37 @@ def _access_log_additive_statements(columns: set[str]) -> list[str]:
         statements.append("ALTER TABLE access_logs ADD COLUMN referer_domain VARCHAR(255)")
     if "referer_type" not in columns:
         statements.append("ALTER TABLE access_logs ADD COLUMN referer_type VARCHAR(32)")
+    if "visitor_id" not in columns:
+        statements.append("ALTER TABLE access_logs ADD COLUMN visitor_id VARCHAR(36)")
+    if "is_page_view" not in columns:
+        statements.append("ALTER TABLE access_logs ADD COLUMN is_page_view INTEGER DEFAULT 0")
+    if "geo_latitude" not in columns:
+        statements.append("ALTER TABLE access_logs ADD COLUMN geo_latitude FLOAT")
+    if "geo_longitude" not in columns:
+        statements.append("ALTER TABLE access_logs ADD COLUMN geo_longitude FLOAT")
+    if "geo_accuracy" not in columns:
+        statements.append("ALTER TABLE access_logs ADD COLUMN geo_accuracy FLOAT")
+    if "client_timezone" not in columns:
+        statements.append("ALTER TABLE access_logs ADD COLUMN client_timezone VARCHAR(64)")
+    if "client_language" not in columns:
+        statements.append("ALTER TABLE access_logs ADD COLUMN client_language VARCHAR(20)")
+    if "device_model_code" not in columns:
+        statements.append("ALTER TABLE access_logs ADD COLUMN device_model_code VARCHAR(100)")
+    if "device_model_name" not in columns:
+        statements.append("ALTER TABLE access_logs ADD COLUMN device_model_name VARCHAR(255)")
+    if "device_brand_name" not in columns:
+        statements.append("ALTER TABLE access_logs ADD COLUMN device_brand_name VARCHAR(100)")
+    if "device_display_name" not in columns:
+        statements.append("ALTER TABLE access_logs ADD COLUMN device_display_name VARCHAR(255)")
+    return statements
+
+
+def _user_session_additive_statements(columns: set[str]) -> list[str]:
+    statements = []
+    if "visitor_id" not in columns:
+        statements.append("ALTER TABLE user_sessions ADD COLUMN visitor_id VARCHAR(36)")
+    if "raw_data" not in columns:
+        statements.append("ALTER TABLE user_sessions ADD COLUMN raw_data TEXT")
     return statements
 
 

@@ -4,8 +4,8 @@
 记录用户访问详情，包括设备信息、地理位置、请求响应等。
 """
 import uuid
-from datetime import datetime
-from sqlalchemy import Column, String, Integer, Text, ForeignKey, Index
+from datetime import UTC, datetime
+from sqlalchemy import Column, String, Integer, Text, ForeignKey, Index, Float
 from app.database import Base
 
 
@@ -34,6 +34,9 @@ class AccessLog(Base):
     # 用户信息（可能未登录）
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     is_authenticated = Column(Integer, default=0)  # 1=已认证，0=未认证
+    visitor_id = Column(String(36), nullable=True, index=True)
+    is_page_view = Column(Integer, default=0)  # 1=页面访问，0=API/资源请求
+
 
     # 网络信息
     ip_address = Column(String(45), nullable=False, index=True)  # IPv6支持
@@ -47,11 +50,21 @@ class AccessLog(Base):
     device_type = Column(String(20))  # desktop/mobile/tablet/unknown
     device_brand = Column(String(50))  # Apple/Samsung/Xiaomi
     device_model = Column(String(100))
+    device_model_code = Column(String(100), nullable=True)
+    device_model_name = Column(String(255), nullable=True)
+    device_brand_name = Column(String(100), nullable=True)
+    device_display_name = Column(String(255), nullable=True)
     os_name = Column(String(50))   # Windows/macOS/iOS/Android
     os_version = Column(String(50))
     browser_name = Column(String(50))  # Chrome/Safari/Firefox
     browser_version = Column(String(50))
     screen_resolution = Column(String(20))  # 1920x1080
+    geo_latitude = Column(Float, nullable=True)
+    geo_longitude = Column(Float, nullable=True)
+    geo_accuracy = Column(Float, nullable=True)
+    client_timezone = Column(String(64), nullable=True)
+    client_language = Column(String(20), nullable=True)
+
 
     # 请求信息
     request_method = Column(String(10))
@@ -89,6 +102,10 @@ class AccessLog(Base):
         Index("idx_access_log_ip", "ip_address", "timestamp"),
     )
 
+    @staticmethod
+    def _utc_timestamp() -> str:
+        return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
     def to_dict(self, include_raw: bool = False) -> dict:
         """
         转换为字典
@@ -104,6 +121,8 @@ class AccessLog(Base):
             "timestamp": self.timestamp,
             "user_id": self.user_id,
             "is_authenticated": bool(self.is_authenticated),
+            "visitor_id": self.visitor_id,
+            "is_page_view": bool(self.is_page_view),
             "ip_address": self.ip_address,
             "ip_country": self.ip_country,
             "ip_city": self.ip_city,
@@ -112,11 +131,20 @@ class AccessLog(Base):
             "device_type": self.device_type,
             "device_brand": self.device_brand,
             "device_model": self.device_model,
+            "device_model_code": self.device_model_code,
+            "device_model_name": self.device_model_name,
+            "device_brand_name": self.device_brand_name,
+            "device_display_name": self.device_display_name,
             "os_name": self.os_name,
             "os_version": self.os_version,
             "browser_name": self.browser_name,
             "browser_version": self.browser_version,
             "screen_resolution": self.screen_resolution,
+            "geo_latitude": self.geo_latitude,
+            "geo_longitude": self.geo_longitude,
+            "geo_accuracy": self.geo_accuracy,
+            "client_timezone": self.client_timezone,
+            "client_language": self.client_language,
             "request_method": self.request_method,
             "request_path": self.request_path,
             "request_query": self.request_query,
@@ -154,7 +182,7 @@ class AccessLog(Base):
     def soft_delete(self):
         """软删除"""
         self.is_deleted = 1
-        self.deleted_at = datetime.utcnow().isoformat() + "Z"
+        self.deleted_at = self._utc_timestamp()
 
     @classmethod
     def from_request(
@@ -164,9 +192,12 @@ class AccessLog(Base):
         response_time_ms: int = None,
         user_id: str = None,
         session_id: str = None,
+        visitor_id: str = None,
+        is_page_view: bool = False,
         device_info: dict = None,
         referer_info: dict | None = None,
         location_info: dict = None,
+        client_info: dict | None = None,
     ) -> "AccessLog":
         """
         从请求创建访问日志
@@ -183,7 +214,7 @@ class AccessLog(Base):
         Returns:
             AccessLog: 访问日志实例
         """
-        timestamp = datetime.utcnow().isoformat() + "Z"
+        timestamp = cls._utc_timestamp()
 
         # 获取IP地址
         ip_address = cls._get_client_ip(request)
@@ -204,6 +235,8 @@ class AccessLog(Base):
             timestamp=timestamp,
             user_id=user_id,
             is_authenticated=1 if user_id else 0,
+            visitor_id=visitor_id,
+            is_page_view=1 if is_page_view else 0,
             ip_address=ip_address,
             ip_country=location_info.get("country") if location_info else None,
             ip_city=location_info.get("city") if location_info else None,
@@ -213,11 +246,20 @@ class AccessLog(Base):
             device_type=device_info.get("device_type") if device_info else None,
             device_brand=device_info.get("device_brand") if device_info else None,
             device_model=device_info.get("device_model") if device_info else None,
+            device_model_code=device_info.get("device_model_code") if device_info else None,
+            device_model_name=device_info.get("device_model_name") if device_info else None,
+            device_brand_name=device_info.get("device_brand_name") if device_info else None,
+            device_display_name=device_info.get("device_display_name") if device_info else None,
             os_name=device_info.get("os_name") if device_info else None,
             os_version=device_info.get("os_version") if device_info else None,
             browser_name=device_info.get("browser_name") if device_info else None,
             browser_version=device_info.get("browser_version") if device_info else None,
             screen_resolution=device_info.get("screen_resolution") if device_info else None,
+            geo_latitude=client_info.get("geo_latitude") if client_info else None,
+            geo_longitude=client_info.get("geo_longitude") if client_info else None,
+            geo_accuracy=client_info.get("geo_accuracy") if client_info else None,
+            client_timezone=client_info.get("client_timezone") if client_info else None,
+            client_language=client_info.get("client_language") if client_info else None,
             request_method=request_method,
             request_path=request_path,
             request_query=request_query,

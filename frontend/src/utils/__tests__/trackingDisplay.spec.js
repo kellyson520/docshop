@@ -1,6 +1,6 @@
 ﻿import { describe, expect, it } from 'vitest'
 import {
-  buildServerIpContextDetails,
+  buildVisitorIpContextDetails,
   buildTrackingInfoCard,
   buildTrackingTechnicalDetails,
   formatDeviceFallback,
@@ -241,9 +241,9 @@ describe('trackingDisplay', () => {
       secondary: 'Android 14 · Chrome Mobile WebView 126',
       location: '📍 39.9042, 116.4074 (±9m)',
       environment: 'Asia/Shanghai · zh-CN',
-      serverIpSummary: '',
-      serverIpRisk: '',
-      serverIpNetwork: '',
+      visitorIpSummary: '',
+      visitorIpType: '',
+      visitorIpNetwork: '',
     })
   })
 
@@ -256,7 +256,7 @@ describe('trackingDisplay', () => {
     }).secondary).toBe('Android 14 · Chrome 124')
   })
 
-  it('adds server egress IP summaries to the tracking info card when context exists', () => {
+  it('adds visitor IP summaries to the tracking info card when context exists', () => {
     const row = {
       device_display_name: 'Huawei P40 / ANA-AL00',
       device_type: 'mobile',
@@ -269,28 +269,28 @@ describe('trackingDisplay', () => {
       client_timezone: 'Asia/Shanghai',
       client_language: 'zh-CN',
     }
-    const serverIpContext = {
-      source: 'ippure_server_egress',
+    const visitorIpContext = {
+      source: 'access_log_visitor_ip',
       ip: '112.224.158.50',
-      city: 'Qingdao',
-      region: 'Shandong',
+      version: 'IPv4',
+      scope: 'public',
+      scopeLabel: '公网',
+      country: 'CN',
       countryCode: 'CN',
-      fraudScore: 0,
-      isResidential: true,
-      isBroadcast: false,
-      asn: 4837,
+      city: 'Qingdao',
+      asn: '4837',
       asOrganization: 'China Unicom Shandong province network',
     }
 
-    expect(buildTrackingInfoCard(row, serverIpContext)).toEqual({
+    expect(buildTrackingInfoCard(row, visitorIpContext)).toEqual({
       title: 'Huawei P40 / ANA-AL00',
       deviceTypeText: '移动端',
       secondary: 'Android 14 · Chrome 126',
       location: 'Beijing, CN',
       environment: 'Asia/Shanghai · zh-CN',
-      serverIpSummary: '服务器出口IP · Qingdao, Shandong, CN',
-      serverIpRisk: '风险 0 · 住宅IP · 非广播',
-      serverIpNetwork: 'AS4837 · China Unicom Shandong province network',
+      visitorIpSummary: '访客IP · Qingdao, CN',
+      visitorIpType: 'IPv4 · 公网',
+      visitorIpNetwork: 'AS4837 · China Unicom Shandong province network',
     })
   })
 
@@ -301,47 +301,40 @@ describe('trackingDisplay', () => {
       secondary: '-',
       location: '-',
       environment: '-',
-      serverIpSummary: '',
-      serverIpRisk: '',
-      serverIpNetwork: '',
+      visitorIpSummary: '',
+      visitorIpType: '',
+      visitorIpNetwork: '',
     })
   })
 
-  it('builds a dedicated server IP detail list and degrades cleanly when absent', () => {
-    const serverIpContext = {
-      source: 'ippure_server_egress',
+  it('builds a dedicated visitor IP detail list and degrades cleanly when absent', () => {
+    const visitorIpContext = {
+      source: 'access_log_visitor_ip',
       ip: '112.224.158.50',
-      country: 'China',
+      version: 'IPv4',
+      scope: 'public',
+      scopeLabel: '公网',
+      country: 'CN',
       countryCode: 'CN',
-      region: 'Shandong',
       city: 'Qingdao',
-      postalCode: '266000',
-      timezone: 'Asia/Shanghai',
-      asn: 4837,
+      asn: '4837',
       asOrganization: 'China Unicom Shandong province network',
-      fraudScore: 0,
-      isResidential: true,
-      isBroadcast: false,
     }
 
-    expect(buildServerIpContextDetails(serverIpContext)).toEqual([
-      { label: '出口 IP', value: '112.224.158.50' },
-      { label: '国家/地区', value: 'China / CN' },
-      { label: '省/州', value: 'Shandong' },
+    expect(buildVisitorIpContextDetails(visitorIpContext)).toEqual([
+      { label: '访客 IP', value: '112.224.158.50' },
+      { label: 'IP 版本', value: 'IPv4' },
+      { label: '地址类型', value: '公网' },
+      { label: '国家/地区', value: 'CN' },
       { label: '城市', value: 'Qingdao' },
-      { label: '邮编', value: '266000' },
-      { label: '时区', value: 'Asia/Shanghai' },
       { label: 'ASN', value: '4837' },
-      { label: 'AS 组织', value: 'China Unicom Shandong province network' },
-      { label: '风险分', value: '0' },
-      { label: '住宅 IP', value: '是' },
-      { label: '广播 IP', value: '否' },
+      { label: '运营商/组织', value: 'China Unicom Shandong province network' },
     ])
 
-    expect(buildTrackingInfoCard({}, null).serverIpSummary).toBe('')
-    expect(buildTrackingInfoCard({}, null).serverIpRisk).toBe('')
-    expect(buildTrackingInfoCard({}, null).serverIpNetwork).toBe('')
-    expect(buildServerIpContextDetails(null)).toEqual([])
+    expect(buildTrackingInfoCard({}, null).visitorIpSummary).toBe('')
+    expect(buildTrackingInfoCard({}, null).visitorIpType).toBe('')
+    expect(buildTrackingInfoCard({}, null).visitorIpNetwork).toBe('')
+    expect(buildVisitorIpContextDetails(null)).toEqual([])
   })
 
   it('returns labeled technical details array with raw values and dash fallbacks', () => {

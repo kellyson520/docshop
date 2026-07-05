@@ -252,13 +252,14 @@ describe('frontend issue regression guards', () => {
     expect(source).not.toMatch(/<el-table-column[^>]+prop="os_name"[\s\S]*<el-table-column[^>]+prop="browser_name"/)
   })
 
-  it('TrackingDashboard keeps shared server_ip_context rendering separate from visitor log fields', () => {
+  it('TrackingDashboard renders visitor_ip_context enrichment separate from base access log fields', () => {
     const source = readSource('src/views/admin/TrackingDashboard.vue')
 
-    expect(source).toContain('server_ip_context')
-    expect(source).toContain('buildServerIpContextDetails')
-    expect(source).toContain('服务器出口 IP 情报')
-    expect(source).toContain('tracking-info-card__meta--server')
+    expect(source).toContain('visitor_ip_context')
+    expect(source).toContain('buildVisitorIpContextDetails')
+    expect(source).toContain('selectedAccessInfoVisitorContextDetails')
+    expect(source).toContain('visitorIpSummary')
+    expect(source).not.toContain('server_ip_context')
   })
 
   it('global workspace skin does not force every logo text to near-white', () => {
@@ -433,7 +434,7 @@ describe('frontend issue regression guards', () => {
     expect(source).toMatch(/URL\.revokeObjectURL\(url\)/)
   })
 
-  it('production UI copy does not leak mojibake placeholders', () => {
+  it('ShareProject source keeps canonical closed-download copy without UTF-8 BOM', () => {
     const files = [
       'src/components/common/AnnouncementBar.vue',
       'src/views/admin/ProjectDetail.vue',
@@ -446,7 +447,10 @@ describe('frontend issue regression guards', () => {
     }
 
     expect(readSource('src/views/share/ShareFile.vue')).toContain('禁止下载')
-    expect(readSource('src/views/share/ShareProject.vue')).toContain('此分享未开放下载')
+    const shareProjectSource = readSource('src/views/share/ShareProject.vue')
+    expect(shareProjectSource.charCodeAt(0)).not.toBe(0xfeff)
+    expect(shareProjectSource).toContain('当前分享未开放下载')
+    expect(shareProjectSource).toContain('禁止下载')
     expect(readSource('src/components/common/AnnouncementBar.vue')).toContain('我知道了')
   })
 
@@ -550,13 +554,18 @@ describe('frontend issue regression guards', () => {
     expect(apiSource).toContain('renameProjectFolder')
     expect(apiSource).toContain('deleteProjectFolder')
     expect(apiSource).toContain('moveProjectFileToFolder')
-    expect(viewSource).toContain('folder-toolbar')
-    expect(viewSource).toContain('folder-grid')
-    expect(viewSource).toContain('folder-card')
+    expect(viewSource).toContain('resource-toolbar')
+    expect(viewSource).toContain(':data="resourceItems"')
     expect(viewSource).toContain('currentFolderId')
     expect(viewSource).toContain('filteredFiles')
     expect(viewSource).toContain('openMoveFileDialog')
     expect(viewSource).toContain('moveFileDialogVisible')
+    expect(viewSource).toContain('resource-folder-item-${row.resourceId}')
+    expect(viewSource).toContain('resource-folder-item-${item.resourceId}')
+    expect(viewSource).toContain('openFolder(row.resourceId)')
+    expect(viewSource).not.toContain('folder-toolbar')
+    expect(viewSource).not.toContain('folder-grid')
+    expect(viewSource).not.toContain('folder-card')
     expect(viewSource).toContain('folder_id: currentFolderId.value')
     expect(viewSource).toContain('moveProjectFileToFolder')
   })

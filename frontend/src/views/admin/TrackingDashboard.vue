@@ -82,8 +82,9 @@
       v-model="trackingModuleDialogVisible"
       :title="activeTrackingModule?.label || '追踪详情'"
       width="min(1080px, 94vw)"
+      v-bind="ADMIN_VIEWPORT_DIALOG_PROPS"
       destroy-on-close
-      class="tracking-module-dialog"
+      class="tracking-module-dialog admin-viewport-dialog"
     >
       <div v-if="activeTrackingModule" class="tracking-module-detail">
         <div class="tracking-module-detail__hero">
@@ -313,14 +314,14 @@
               <div class="tracking-info-card__secondary">{{ getTrackingInfoCard(row).secondary }}</div>
               <div class="tracking-info-card__meta">{{ getTrackingInfoCard(row).location }}</div>
               <div class="tracking-info-card__meta">{{ getTrackingInfoCard(row).environment }}</div>
-              <div v-if="getTrackingInfoCard(row).serverIpSummary" class="tracking-info-card__meta tracking-info-card__meta--server">
-                {{ getTrackingInfoCard(row).serverIpSummary }}
+              <div v-if="getTrackingInfoCard(row).visitorIpSummary" class="tracking-info-card__meta tracking-info-card__meta--server">
+                {{ getTrackingInfoCard(row).visitorIpSummary }}
               </div>
-              <div v-if="getTrackingInfoCard(row).serverIpRisk" class="tracking-info-card__meta tracking-info-card__meta--server">
-                {{ getTrackingInfoCard(row).serverIpRisk }}
+              <div v-if="getTrackingInfoCard(row).visitorIpType" class="tracking-info-card__meta tracking-info-card__meta--server">
+                {{ getTrackingInfoCard(row).visitorIpType }}
               </div>
-              <div v-if="getTrackingInfoCard(row).serverIpNetwork" class="tracking-info-card__meta tracking-info-card__meta--server">
-                {{ getTrackingInfoCard(row).serverIpNetwork }}
+              <div v-if="getTrackingInfoCard(row).visitorIpNetwork" class="tracking-info-card__meta tracking-info-card__meta--server">
+                {{ getTrackingInfoCard(row).visitorIpNetwork }}
               </div>
             </div>
           </template>
@@ -349,8 +350,9 @@
         v-model="accessInfoDialogVisible"
         title="访问信息详情"
         width="720px"
+        v-bind="ADMIN_VIEWPORT_DIALOG_PROPS"
         destroy-on-close
-        class="access-info-dialog"
+        class="access-info-dialog admin-viewport-dialog"
         @closed="closeAccessInfoDialog"
       >
         <div v-if="selectedAccessInfoLog && selectedAccessInfoCard" class="access-info-dialog__content">
@@ -385,17 +387,17 @@
             </el-descriptions-item>
           </el-descriptions>
 
-          <el-divider v-if="selectedAccessInfoServerContextDetails.length">服务器出口 IP 情报</el-divider>
+          <el-divider v-if="selectedAccessInfoVisitorContextDetails.length">访客 IP 情报</el-divider>
 
           <el-descriptions
-            v-if="selectedAccessInfoServerContextDetails.length"
+            v-if="selectedAccessInfoVisitorContextDetails.length"
             :column="2"
             border
             class="access-info-server-context"
           >
             <el-descriptions-item
-              v-for="item in selectedAccessInfoServerContextDetails"
-              :key="`server-${item.label}`"
+              v-for="item in selectedAccessInfoVisitorContextDetails"
+              :key="`visitor-${item.label}`"
               :label="item.label"
             >
               {{ item.value }}
@@ -468,8 +470,9 @@ import {
 } from '@element-plus/icons-vue'
 import { del, get, put } from '@/api/client'
 import PageHeader from '@/components/common/PageHeader.vue'
+import { ADMIN_VIEWPORT_DIALOG_PROPS } from '@/utils/adminDialog'
 import {
-  buildServerIpContextDetails,
+  buildVisitorIpContextDetails,
   formatDevicePrimary,
   formatDeviceSecondary,
   formatDeviceTooltip,
@@ -570,7 +573,6 @@ const osDistributionRows = computed(() => (stats.value?.os_distribution || []).m
 const statusDistributionRows = computed(() => stats.value?.status_distribution || [])
 const countryDistributionRows = computed(() => stats.value?.country_distribution || [])
 const logRows = computed(() => logs.value?.items || [])
-const serverIpContext = computed(() => logs.value?.server_ip_context || null)
 const trackingModules = computed(() => [
   {
     key: 'config',
@@ -630,14 +632,15 @@ const trackingModules = computed(() => [
 const activeTrackingModule = computed(() => (
   trackingModules.value.find((item) => item.key === activeTrackingModuleKey.value) || trackingModules.value[0]
 ))
+const getVisitorIpContext = (row = {}) => row?.visitor_ip_context || null
 const selectedAccessInfoCard = computed(() => (
-  selectedAccessInfoLog.value ? buildTrackingInfoCard(selectedAccessInfoLog.value, serverIpContext.value) : null
+  selectedAccessInfoLog.value ? buildTrackingInfoCard(selectedAccessInfoLog.value, getVisitorIpContext(selectedAccessInfoLog.value)) : null
 ))
 const selectedAccessInfoTechnicalDetails = computed(() => (
   selectedAccessInfoLog.value ? buildTrackingTechnicalDetails(selectedAccessInfoLog.value) : []
 ))
-const selectedAccessInfoServerContextDetails = computed(() => (
-  buildServerIpContextDetails(serverIpContext.value)
+const selectedAccessInfoVisitorContextDetails = computed(() => (
+  buildVisitorIpContextDetails(getVisitorIpContext(selectedAccessInfoLog.value))
 ))
 const logsRangeLabel = computed(() => {
   if (!logsRange.value || logsRange.value.length !== 2) return '未限定'
@@ -686,7 +689,7 @@ function formatLogTimestamp(value) {
 }
 
 function getTrackingInfoCard(row = {}) {
-  return buildTrackingInfoCard(row, serverIpContext.value)
+  return buildTrackingInfoCard(row, getVisitorIpContext(row))
 }
 
 function formatAccessInfoSystem(row = {}) {

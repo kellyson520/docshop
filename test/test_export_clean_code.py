@@ -1,5 +1,7 @@
+import os
 from pathlib import Path
 import subprocess
+import stat
 import sys
 
 from scripts.export_clean_code import (
@@ -23,9 +25,13 @@ def test_to_posix_relative_normalizes_windows_like_paths():
 
 def test_should_exclude_dir_for_known_test_and_noise_directories():
     assert should_exclude_dir("backend/tests") is True
+    assert should_exclude_dir("backend/load_tests") is True
     assert should_exclude_dir("frontend/src/components/__tests__") is True
     assert should_exclude_dir("frontend/node_modules") is True
     assert should_exclude_dir("docs") is True
+    assert should_exclude_dir("data") is True
+    assert should_exclude_dir("artifacts") is True
+    assert should_exclude_dir(".reasonix") is True
     assert should_exclude_dir("frontend/src/components") is False
 
 
@@ -35,6 +41,12 @@ def test_should_exclude_file_for_test_and_noise_files():
     assert should_exclude_file("frontend/vitest.config.js") is True
     assert should_exclude_file("backend/requirements-dev.txt") is True
     assert should_exclude_file("backend/dev-backend.log") is True
+    assert should_exclude_file("backend/test.db") is True
+    assert should_exclude_file("backend/probe_counter.db") is True
+    assert should_exclude_file("backend/debug_preconvert.db") is True
+    assert should_exclude_file("backend/test_memory_performance.db") is True
+    assert should_exclude_file("backend/.env") is True
+    assert should_exclude_file("backend/tmp_word_test.py") is True
     assert should_exclude_file("frontend/src/main.js") is False
 
 
@@ -54,6 +66,28 @@ def test_export_clean_code_clears_output_before_copy(tmp_path):
     assert summary.copied_files == 1
     assert (output / "stale.txt").exists() is False
     assert (output / "frontend" / "src" / "main.js").read_text(encoding="utf-8") == "console.log('ok')"
+
+
+def test_export_clean_code_clears_read_only_output_files_on_windows(tmp_path):
+    source = tmp_path / "source"
+    output = tmp_path / "output"
+    source.mkdir()
+    output.mkdir()
+
+    nested = output / "old" / ".git" / "objects" / "00"
+    nested.mkdir(parents=True)
+    readonly_file = nested / "readonly.bin"
+    readonly_file.write_text("old", encoding="utf-8")
+    os.chmod(readonly_file, stat.S_IREAD)
+
+    (source / "backend").mkdir()
+    (source / "backend" / "app.py").write_text("print('ok')", encoding="utf-8")
+
+    summary = export_clean_code(source, output)
+
+    assert summary.copied_files == 1
+    assert (output / "old").exists() is False
+    assert (output / "backend" / "app.py").exists() is True
 
 
 def test_export_clean_code_skips_noise_and_preserves_relative_structure(tmp_path):

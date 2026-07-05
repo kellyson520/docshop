@@ -1,0 +1,1 @@
+export { resolveCoverUrl } from './resourceUrl'

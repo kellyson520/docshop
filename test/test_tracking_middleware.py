@@ -261,3 +261,210 @@ def test_log_access_merges_client_hints_with_real_user_agent_path_before_buildin
     assert captured["device_info"]["device_type"] == "desktop"
     assert captured["device_info"]["device_brand"] == "Xiaomi"
     assert captured["device_info"]["device_model"] == "Xiaomi 14"
+
+
+
+def make_request(path="/docs", accept="text/html", method="GET"):
+    return SimpleNamespace(
+        headers={"accept": accept, "user-agent": SAMPLE_ANDROID_UA},
+        url=SimpleNamespace(path=path, query="", hostname="docshop.local"),
+        method=method,
+        state=SimpleNamespace(session_id="session-1", user_id=None, device_id="visitor-1", device_fingerprint="fp-1"),
+        path_params={},
+        cookies={},
+        client=SimpleNamespace(host="203.0.113.10"),
+    )
+
+
+def test_is_page_view_true_for_html_navigation():
+    middleware = TrackingMiddleware(app=None)
+
+    assert middleware._is_page_view(make_request("/admin/tracking", "text/html,application/xhtml+xml")) is True
+
+
+def test_is_page_view_false_for_api_and_assets():
+    middleware = TrackingMiddleware(app=None)
+
+    assert middleware._is_page_view(make_request("/api/v1/projects", "application/json")) is False
+    assert middleware._is_page_view(make_request("/assets/index.js", "*/*")) is False
+    assert middleware._is_page_view(make_request("/favicon.ico", "image/x-icon")) is False
+
+
+def test_should_skip_tracking_ping_path():
+    middleware = TrackingMiddleware(app=None)
+
+    assert middleware._should_skip_tracking(make_request("/api/v1/tracking/ping", "application/json", method="POST")) is True
+    assert middleware._should_skip_tracking(make_request("/api/v1/projects", "application/json")) is False
+
+
+def test_log_access_persists_visitor_id_and_page_view(monkeypatch):
+    install_fake_user_agents(monkeypatch)
+    middleware = TrackingMiddleware(app=None)
+    db = DummyDB()
+
+    monkeypatch.setattr(tracking_module, "SessionLocal", lambda: db)
+    monkeypatch.setattr(tracking_module, "AccessLog", CaptureAccessLog)
+    monkeypatch.setattr(middleware, "_get_client_ip", lambda request: "203.0.113.10")
+    monkeypatch.setattr(middleware, "_extract_business_context", lambda request: {})
+    monkeypatch.setattr(middleware, "_update_session", lambda *args, **kwargs: None)
+
+    request = make_request("/admin/tracking", "text/html")
+    response = SimpleNamespace(status_code=200)
+
+    asyncio.run(middleware._log_access(request, response, 15, DummyConfig()))
+
+    assert len(db.added) == 1
+    log_entry = db.added[0]
+    assert log_entry.visitor_id == "visitor-1"
+    assert log_entry.is_page_view == 1
+
+
+def test_update_session_stores_visitor_id_and_only_counts_page_views(monkeypatch):
+    middleware = TrackingMiddleware(app=None)
+    created_sessions = []
+
+    class Query:
+        def filter(self, *args, **kwargs):
+            return self
+        def first(self):
+            return None
+
+    class SessionDB(DummyDB):
+        def query(self, model):
+            return Query()
+        def add(self, obj):
+            created_sessions.append(obj)
+            super().add(obj)
+
+    db = SessionDB()
+    request = make_request("/api/v1/projects", "application/json")
+    request.state.is_page_view = False
+
+    middleware._update_session(db, request, None, {"device_type": "desktop"})
+
+    assert created_sessions
+    assert created_sessions[0].visitor_id == "visitor-1"
+    assert created_sessions[0].page_view_count == 0
+
+
+def test_log_access_stores_resolved_mobile_model_fields(monkeypatch):
+    install_fake_user_agents(monkeypatch)
+    middleware = TrackingMiddleware(app=None)
+    db = DummyDB()
+
+    monkeypatch.setattr(tracking_module, "SessionLocal", lambda: db)
+    monkeypatch.setattr(tracking_module, "AccessLog", CaptureAccessLog)
+    monkeypatch.setattr(middleware, "_get_client_ip", lambda request: "203.0.113.10")
+    monkeypatch.setattr(middleware, "_extract_business_context", lambda request: {})
+    monkeypatch.setattr(middleware, "_update_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tracking_module, "resolve_mobile_model_from_user_agent", lambda ua, cache_path=None: {
+        "device_model_code": "ANA-AL00",
+        "device_model_name": "P40",
+        "device_brand_name": "Huawei",
+        "device_display_name": "Huawei P40 / ANA-AL00",
+    }, raising=False)
+
+    request = make_request("/docs", "text/html")
+    request.headers["user-agent"] = "Mozilla/5.0 (Linux; Android 10; ANA-AL00 Build/HUAWEIANA-AL00) Mobile"
+
+    asyncio.run(middleware._log_access(request, SimpleNamespace(status_code=200), 10, DummyConfig()))
+
+    assert len(db.added) == 1
+    log_entry = db.added[0]
+    assert log_entry.device_model_code == "ANA-AL00"
+    assert log_entry.device_model_name == "P40"
+    assert log_entry.device_brand_name == "Huawei"
+    assert log_entry.device_display_name == "Huawei P40 / ANA-AL00"
+
+
+def test_log_access_calls_resolver_and_leaves_unknown_mobile_model_empty(monkeypatch):
+    install_fake_user_agents(monkeypatch)
+    middleware = TrackingMiddleware(app=None)
+    db = DummyDB()
+    calls = []
+
+    monkeypatch.setattr(tracking_module, "SessionLocal", lambda: db)
+    monkeypatch.setattr(tracking_module, "AccessLog", CaptureAccessLog)
+    monkeypatch.setattr(middleware, "_get_client_ip", lambda request: "203.0.113.10")
+    monkeypatch.setattr(middleware, "_extract_business_context", lambda request: {})
+    monkeypatch.setattr(middleware, "_update_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tracking_module, "resolve_mobile_model_from_user_agent", lambda ua, cache_path=None: calls.append(ua) or {}, raising=False)
+
+    asyncio.run(middleware._log_access(make_request("/docs", "text/html"), SimpleNamespace(status_code=200), 10, DummyConfig()))
+
+    assert calls
+    log_entry = db.added[0]
+    assert getattr(log_entry, "device_model_code", None) is None
+    assert getattr(log_entry, "device_display_name", None) is None
+
+
+def test_log_access_resolver_errors_do_not_prevent_access_log_creation(monkeypatch):
+    install_fake_user_agents(monkeypatch)
+    middleware = TrackingMiddleware(app=None)
+    db = DummyDB()
+    calls = []
+
+    monkeypatch.setattr(tracking_module, "SessionLocal", lambda: db)
+    monkeypatch.setattr(tracking_module, "AccessLog", CaptureAccessLog)
+    monkeypatch.setattr(middleware, "_get_client_ip", lambda request: "203.0.113.10")
+    monkeypatch.setattr(middleware, "_extract_business_context", lambda request: {})
+    monkeypatch.setattr(middleware, "_update_session", lambda *args, **kwargs: None)
+
+    def broken_resolver(ua, cache_path=None):
+        calls.append(ua)
+        raise RuntimeError("cache broken")
+
+    monkeypatch.setattr(tracking_module, "resolve_mobile_model_from_user_agent", broken_resolver, raising=False)
+
+    asyncio.run(middleware._log_access(make_request("/docs", "text/html"), SimpleNamespace(status_code=200), 10, DummyConfig()))
+
+    assert calls
+    assert len(db.added) == 1
+    assert db.committed is True
+
+
+def test_mobile_model_cache_refresh_schedules_once_when_stale(monkeypatch):
+    middleware = TrackingMiddleware(app=None)
+    scheduled = []
+
+    monkeypatch.setattr(tracking_module, "settings", SimpleNamespace(
+        MOBILE_MODEL_SYNC_ENABLED=True,
+        MOBILE_MODEL_SYNC_INTERVAL_HOURS=168,
+        MOBILE_MODEL_CACHE_DIR="./data/cache",
+    ))
+    monkeypatch.setattr(tracking_module, "is_cache_stale", lambda meta_path, interval_hours: True, raising=False)
+
+    async def fake_refresh(settings_obj):
+        return {"updated": True, "row_count": 1, "error": None}
+
+    def fake_create_logged_task(coro, *, name):
+        scheduled.append((coro, name))
+        return SimpleNamespace(done=lambda: False)
+
+    monkeypatch.setattr(tracking_module, "refresh_mobile_model_cache_async", fake_refresh, raising=False)
+    monkeypatch.setattr(tracking_module, "create_logged_task", fake_create_logged_task)
+
+    middleware._maybe_schedule_mobile_model_cache_refresh()
+    middleware._maybe_schedule_mobile_model_cache_refresh()
+
+    assert len(scheduled) == 1
+    assert scheduled[0][1] == "mobile-model-cache-refresh"
+    scheduled[0][0].close()
+
+
+def test_mobile_model_cache_refresh_skips_when_disabled(monkeypatch):
+    middleware = TrackingMiddleware(app=None)
+    scheduled = []
+
+    monkeypatch.setattr(tracking_module, "settings", SimpleNamespace(
+        MOBILE_MODEL_SYNC_ENABLED=False,
+        MOBILE_MODEL_SYNC_INTERVAL_HOURS=168,
+        MOBILE_MODEL_CACHE_DIR="./data/cache",
+    ))
+    monkeypatch.setattr(tracking_module, "is_cache_stale", lambda meta_path, interval_hours: True, raising=False)
+    monkeypatch.setattr(tracking_module, "create_logged_task", lambda coro, *, name: scheduled.append((coro, name)))
+
+    middleware._maybe_schedule_mobile_model_cache_refresh()
+
+    assert scheduled == []
+

@@ -677,3 +677,8 @@ The most important architectural rule is:
 
 **business pages should not make independent per-extension rendering decisions; they should consume backend-declared capabilities and manifests.**
 
+## Implementation Notes
+
+- Keep `content` text fallback for older announcement rows whose `content_blocks_json` is empty.
+- Preserve existing docx/xlsx/pdf diff payload shapes under their current engine paths while adding media/archive branches.
+- Keep `DiffResponse.diff_data` as a JSON string contract so existing frontend parsing continues to work.
